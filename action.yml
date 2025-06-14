@@ -1,0 +1,22 @@
+name: 'Vibe All Coding Agent'
+description: 'A GitHub Action for activating coding agents with configurable models and trigger words'
+author: 'Ivan Leo'
+inputs:
+  agent:
+    description: 'Which coding agent to use (amp, claude, etc.)'
+    required: false
+    default: 'amp'
+  model:
+    description: 'Model to use for the agent'
+    required: false
+    default: 'claude-3-sonnet'
+  trigger-word:
+    description: 'Trigger word to activate the agent'
+    required: false
+    default: '@agent'
+outputs:
+  result:
+    description: 'Result from the coding agent'
+runs:
+  using: 'node20'
+  main: 'packages/gh-action/dist/index.js'

@@ -1,0 +1,23 @@
+{
+  "name": "@essencevc/vibe-all-coding",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "bun run build:action && bun run build:mcp",
+    "dev": "bun --watch dev",
+    "lint": "bun run lint --filter=*",
+    "test": "bun test",
+    "clean": "bun run clean --filter=*",
+    "build:action": "cd packages/gh-action && bun run build",
+    "build:mcp": "cd packages/mcp && bun run build",
+    "dev:web": "cd apps/web && bun run dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
