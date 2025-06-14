@@ -6,7 +6,6 @@
 vibe-all-coding/
 ├── package.json                 # Root workspace configuration
 ├── action.yml                   # GitHub Action definition (at root)
-├── turbo.json                   # Turborepo build configuration
 ├── README.md                    # Main project documentation
 ├── .github/
 │   └── workflows/
@@ -54,18 +53,18 @@ vibe-all-coding/
     "apps/*"
   ],
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "test": "turbo test",
-    "clean": "turbo clean",
-    "build:action": "cd packages/gh-action && npm run build",
-    "build:mcp": "cd packages/mcp && npm run build",
-    "dev:web": "cd apps/web && npm run dev"
+    "build": "bun run build:action && bun run build:mcp",
+    "dev": "bun --watch dev",
+    "lint": "bun run lint --filter=*",
+    "test": "bun test",
+    "clean": "bun run clean --filter=*",
+    "build:action": "cd packages/gh-action && bun run build",
+    "build:mcp": "cd packages/mcp && bun run build",
+    "dev:web": "cd apps/web && bun run dev"
   },
   "devDependencies": {
-    "turbo": "^1.10.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
   }
 }
 ```
@@ -96,29 +95,7 @@ runs:
   main: 'packages/gh-action/dist/index.js'
 ```
 
-### turbo.json
-```json
-{
-  "$schema": "https://turbo.build/schema.json",
-  "pipeline": {
-    "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "lint": {},
-    "test": {
-      "dependsOn": ["build"]
-    },
-    "clean": {
-      "cache": false
-    }
-  }
-}
-```
+
 
 ## Package Configurations
 
@@ -133,9 +110,9 @@ runs:
     "vibe-all-coding-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js"
+    "build": "bun build src/index.ts --outdir=dist --target=node",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun dist/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
@@ -160,10 +137,10 @@ runs:
   "main": "dist/index.js",
   "private": true,
   "scripts": {
-    "build": "tsc && ncc build lib/main.js --source-map --license licenses.txt -o dist",
-    "dev": "tsc --watch",
+    "build": "bun build src/main.ts --outdir=lib --target=node && bun run package",
+    "dev": "bun --watch src/main.ts",
     "package": "ncc build lib/main.js --source-map --license licenses.txt -o dist",
-    "all": "npm run build && npm run package"
+    "all": "bun run build"
   },
   "dependencies": {
     "@actions/core": "^1.10.1",
@@ -186,8 +163,8 @@ runs:
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "bun build src/index.ts --outdir=dist --target=node --format=esm --splitting",
+    "dev": "bun --watch src/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
@@ -225,10 +202,10 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           
       - name: Install dependencies
-        run: npm ci
+        run: bun install
         
       - name: Build all packages
-        run: npm run build
+        run: bun run build
         
       - name: Publish MCP package
         if: startsWith(github.ref, 'refs/tags/mcp/')
@@ -245,7 +222,7 @@ jobs:
       - name: Update action dist files
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          npm run build:action
+          bun run build:action
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add packages/gh-action/dist/
@@ -306,17 +283,17 @@ jobs:
 ### Development Workflow
 ```bash
 # Install all dependencies
-npm install
+bun install
 
 # Build all packages
-npm run build
+bun run build
 
 # Start development mode
-npm run dev
+bun run dev
 
 # Build specific components
-npm run build:action
-npm run build:mcp
+bun run build:action
+bun run build:mcp
 
 # Release process
 git tag v1.0.0          # For GitHub Action
