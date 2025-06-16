@@ -1,7 +1,53 @@
-export function generate_plan(
+import { readFileSync } from "fs";
+import { join } from "path";
+import Anthropic from "@anthropic-ai/sdk";
+
+// Function to import prompts from .txt files in the prompts folder
+export function loadPrompt(promptName: string): string {
+  try {
+    const promptPath = join(__dirname, "../prompts", `${promptName}.txt`);
+    return readFileSync(promptPath, "utf-8");
+  } catch (error) {
+    throw new Error(`Failed to load prompt "${promptName}": ${error}`);
+  }
+}
+
+// Create Anthropic client instance
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+export async function generate_plan(
   taskDescription: string,
   context?: string
-): string {
+): Promise<string> {
+  const planPrompt = loadPrompt("plan");
   const contextStr = context || "";
-  return `Plan for: ${taskDescription}\nContext: ${contextStr}\nPlan steps:\n1. Analyze requirements\n2. Break down into tasks\n3. Execute implementation`;
+
+  const fullPrompt = planPrompt
+    .replace("{task}", taskDescription)
+    .replace("{context}", contextStr);
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4000,
+      messages: [
+        {
+          role: "user",
+          content: fullPrompt,
+        },
+      ],
+    });
+
+    for (const content of response.content) {
+      if (content.type === "text") {
+        return content.text;
+      }
+    }
+
+    throw new Error("No text content found in response");
+  } catch (error) {
+    throw new Error(`Failed to generate plan: ${error}`);
+  }
 }

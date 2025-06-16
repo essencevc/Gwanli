@@ -30,7 +30,7 @@ server.tool(
       .describe("Additional context about the codebase or project"),
   },
   async ({ taskDescription, context = "" }) => {
-    const plan = generate_plan(taskDescription, context);
+    const plan = await generate_plan(taskDescription, context);
     return {
       content: [{ type: "text", text: plan }],
     };

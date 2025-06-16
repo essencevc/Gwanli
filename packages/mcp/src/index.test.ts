@@ -2,12 +2,11 @@ import { describe, it, expect } from "vitest";
 import { generate_plan } from "./lib/plan";
 
 describe("generate_plan", () => {
-  it("should return a string plan with task description", () => {
+  it("should ask for more clarification with a broad scope", async () => {
     const taskDescription = "Build a todo app";
-    const result = generate_plan(taskDescription);
+    const result = await generate_plan(taskDescription);
 
-    expect(typeof result).toBe("string");
-    expect(result).toContain(taskDescription);
-    expect(result).toContain("Plan for:");
-  });
+    expect(result).toContain("<error>");
+    expect(result).not.toContain("<issues>");
+  }, 20000);
 });
