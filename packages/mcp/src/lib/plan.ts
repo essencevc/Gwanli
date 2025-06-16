@@ -1,6 +1,16 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+
+// Define the structured response schema
+const PlanResponseSchema = z.object({
+  hasError: z.boolean(),
+  errorMessage: z.string(),
+  suggested_issues: z.array(z.string()),
+});
+
+export type PlanResponse = z.infer<typeof PlanResponseSchema>;
 
 // Function to import prompts from .txt files in the prompts folder
 export function loadPrompt(promptName: string): string {
