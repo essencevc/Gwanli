@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "GitHub Action source for Vibe All Coding",
   "main": "dist/index.js",
-  "private": true,
   "scripts": {
     "build": "bun build src/main.ts --outdir=lib --target=node && bun run package",
     "dev": "bun --watch src/main.ts",
