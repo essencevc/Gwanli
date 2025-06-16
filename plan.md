@@ -14,12 +14,12 @@ New behavior: Returns structured JSON with `{ hasError: bool, errorMessage: str,
 ## Sequential Checklist
 
 1. **Add Zod dependency**
-   - [ ] Install Zod in packages/mcp for schema validation
-   - [ ] Update package.json
+   - [x] Install Zod in packages/mcp for schema validation
+   - [x] Update package.json
 
 2. **Define response schema**
-   - [ ] Create Zod schema for the structured response format
-   - [ ] Include hasError (boolean), errorMessage (string), suggested_issues (array of strings)
+   - [x] Create Zod schema for the structured response format
+   - [x] Include hasError (boolean), errorMessage (string), suggested_issues (array of strings)
 
 3. **Update Anthropic API call**
    - [ ] Modify the anthropic.messages.create call to use structured output
