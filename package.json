@@ -1,6 +1,6 @@
 {
-  "name": "@essencevc/vibe-all-coding",
-  "version": "0.1.0",
+  "name": "vibe-all-coding",
+  "version": "0.1.2",
   "workspaces": [
     "packages/*",
     "apps/*"

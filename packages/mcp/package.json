@@ -1,15 +1,18 @@
 {
-  "name": "@essencevc/vibe-all-coding-mcp",
-  "version": "0.1.0",
+  "name": "vibe-all-coding",
+  "version": "0.1.6",
   "type": "module",
+  "main": "dist/index.js",
+  "bin": "dist/index.js",
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "preview": "npx @modelcontextprotocol/inspector dist/index.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@anthropic-ai/sdk": "^0.29.0",
-    "zod": "^3.25.50-beta.0"
+    "zod": "^3.25.64"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

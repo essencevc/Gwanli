@@ -1,35 +1,87 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+  ErrorCode,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { generate_plan } from "./lib/plan.js";
 
-const server = new McpServer({
-  name: "vibe-all-coding",
-  version: "0.1.0",
-});
-
-server.tool(
-  "echo",
-  { text: z.string().describe("Text to echo back") },
-  async ({ text }) => ({
-    content: [{ type: "text", text: `Echo: ${text}` }],
-  })
+const server = new Server(
+  {
+    name: "vibe-all-coding",
+    version: "0.1.0",
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
 );
 
-server.tool(
-  "suggest_issues",
-  {
-    taskDescription: z
-      .string()
-      .describe("The task or feature request to break down into issues"),
-    context: z
-      .string()
-      .optional()
-      .describe("Additional context about the codebase or project"),
+// Define tool schemas
+const ECHO_TOOL = {
+  name: "echo",
+  description: "Echo back the provided text",
+  inputSchema: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        description: "Text to echo back",
+      },
+    },
+    required: ["text"],
   },
-  async ({ taskDescription, context = "" }) => {
+};
+
+const SUGGEST_ISSUES_TOOL = {
+  name: "suggest_issues",
+  description: "Break down a task or feature request into actionable issues",
+  inputSchema: {
+    type: "object",
+    properties: {
+      taskDescription: {
+        type: "string",
+        description: "The task or feature request to break down into issues",
+      },
+      context: {
+        type: "string",
+        description: "Additional context about the codebase or project",
+      },
+    },
+    required: ["taskDescription"],
+  },
+};
+
+// List available tools
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [ECHO_TOOL, SUGGEST_ISSUES_TOOL],
+  };
+});
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  if (name === "echo") {
+    const { text } = args as { text: string };
+    return {
+      content: [{ type: "text", text: `Echo: ${text}` }],
+    };
+  }
+
+  if (name === "suggest_issues") {
+    const { taskDescription, context = "" } = args as {
+      taskDescription: string;
+      context?: string;
+    };
+
     const plan = await generate_plan(taskDescription, context);
 
     if (plan.needsClarification) {
@@ -38,12 +90,12 @@ server.tool(
       };
     }
 
-    if (plan.suggested_issues.length == 0) {
+    if (plan.suggested_issues.length === 0) {
       return {
         content: [
           {
             type: "text",
-            text: "Unable to generate issues. PLease try again.",
+            text: "Unable to generate issues. Please try again.",
           },
         ],
       };
@@ -57,7 +109,9 @@ server.tool(
       content: [{ type: "text", text: issuesText }],
     };
   }
-);
+
+  throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+});
 
 async function main() {
   const transport = new StdioServerTransport();
