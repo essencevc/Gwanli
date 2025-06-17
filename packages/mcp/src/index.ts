@@ -24,21 +24,6 @@ const server = new Server(
 );
 
 // Define tool schemas
-const ECHO_TOOL = {
-  name: "echo",
-  description: "Echo back the provided text",
-  inputSchema: {
-    type: "object",
-    properties: {
-      text: {
-        type: "string",
-        description: "Text to echo back",
-      },
-    },
-    required: ["text"],
-  },
-};
-
 const SUGGEST_ISSUES_TOOL = {
   name: "suggest_issues",
   description: "Break down a task or feature request into actionable issues",
@@ -61,20 +46,13 @@ const SUGGEST_ISSUES_TOOL = {
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [ECHO_TOOL, SUGGEST_ISSUES_TOOL],
+    tools: [SUGGEST_ISSUES_TOOL],
   };
 });
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-
-  if (name === "echo") {
-    const { text } = args as { text: string };
-    return {
-      content: [{ type: "text", text: `Echo: ${text}` }],
-    };
-  }
 
   if (name === "suggest_issues") {
     const { taskDescription, context = "" } = args as {
