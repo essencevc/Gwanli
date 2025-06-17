@@ -13,7 +13,8 @@
     "clean": "bun run clean --filter=*",
     "build:action": "cd packages/gh-action && bun run build",
     "build:mcp": "cd packages/mcp && bun run build",
-    "dev:web": "cd apps/web && bun run dev"
+    "dev:web": "cd apps/web && bun run dev",
+    "publish:mcp": "cd packages/mcp && bun run build && bun publish --access=public"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
