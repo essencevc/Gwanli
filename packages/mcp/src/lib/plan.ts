@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import Anthropic from "@anthropic-ai/sdk";
-import { toJSONSchema, z } from "zod/v4";
+import { z } from "zod/v4";
 
 // Define the structured response schema
 const PlanResponseSchema = z.object({
@@ -50,7 +50,7 @@ export async function generate_plan(
         description:
           "Return the structured plan response with error handling and suggested issues",
         //@ts-ignore
-        input_schema: toJSONSchema(PlanResponseSchema),
+        input_schema: z.toJSONSchema(PlanResponseSchema),
       },
     ],
     tool_choice: { type: "tool", name: "return_plan_response" },
