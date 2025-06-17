@@ -4,7 +4,6 @@ A powerful MCP (Model Context Protocol) server that provides AI-powered coding a
 
 ## Features
 
-- **Echo Tool**: Simple text echoing for testing
 - **Suggest Issues**: Break down tasks and features into actionable development issues using AI
 - **Task Planning**: Generate structured, manageable work items from complex requirements
 
@@ -46,12 +45,6 @@ To use vibe-all-coding with Claude Desktop, add this configuration to your Claud
 
 ## Tools Available
 
-### echo
-Simple tool that echoes back the provided text.
-
-**Parameters:**
-- `text` (string): The text to echo back
-
 ### suggest_issues
 Breaks down complex tasks or feature requests into manageable, actionable development issues.
 
@@ -66,9 +59,9 @@ Breaks down complex tasks or feature requests into manageable, actionable develo
 ## Example Usage
 
 Once configured with Claude Desktop, you can use commands like:
-- "Echo this message back to me"
 - "Break down building a user authentication system into development issues"
 - "Suggest issues for implementing a REST API with user management"
+- "Help me plan out a new feature for user dashboard analytics"
 
 ## Development
 
