@@ -1,9 +1,11 @@
 {
   "name": "vibe-all-coding",
-  "version": "0.1.6",
+  "version": "0.1.11",
   "type": "module",
   "main": "dist/index.js",
-  "bin": "dist/index.js",
+  "bin": {
+    "vibe-all-coding": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "preview": "npx @modelcontextprotocol/inspector dist/index.js",
