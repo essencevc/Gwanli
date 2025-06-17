@@ -1,9 +1,6 @@
 name: Publish MCP Server
 
 on:
-  push:
-    branches: [main]
-    paths: ["packages/mcp/**"]
   release:
     types: [published]
   workflow_dispatch:
