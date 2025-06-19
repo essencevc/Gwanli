@@ -1,8 +1,6 @@
 import { ChromaClient } from 'chromadb';
 import { OpenAI } from 'openai';
 import { z } from 'zod';
-import { join } from 'path';
-import { homedir } from 'os';
 
 // Schema for storing task examples
 export const TaskExampleSchema = z.object({
@@ -13,8 +11,17 @@ export const TaskExampleSchema = z.object({
 
 export type TaskExample = z.infer<typeof TaskExampleSchema>;
 
-// Environment variable for ChromaDB path
-const CHROMA_DB_PATH = process.env.CHROMA_DB_PATH || join(homedir(), '.vibeallcoding', 'chromadb');
+// Environment variables for ChromaDB configuration
+const CHROMA_URL = process.env.CHROMA_URL;
+const CHROMA_AUTH_TOKEN = process.env.CHROMA_AUTH_TOKEN;
+
+if (!CHROMA_URL) {
+  throw new Error('CHROMA_URL environment variable is required. Please set up your Chroma Cloud account.');
+}
+
+if (!CHROMA_AUTH_TOKEN) {
+  throw new Error('CHROMA_AUTH_TOKEN environment variable is required. Please set up your Chroma Cloud account.');
+}
 
 // OpenAI client for embeddings
 const openai = new OpenAI({
@@ -26,8 +33,14 @@ export class TaskExampleStore {
   private collection: any;
 
   constructor() {
+    // Configure client for Chroma Cloud
     this.client = new ChromaClient({
-      path: CHROMA_DB_PATH
+      path: CHROMA_URL,
+      auth: {
+        provider: "token",
+        credentials: CHROMA_AUTH_TOKEN,
+        tokenHeaderType: "AUTHORIZATION"
+      }
     });
   }
 
