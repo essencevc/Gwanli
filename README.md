@@ -31,7 +31,10 @@ To use vibe-all-coding with Claude Desktop, add this configuration to your Claud
       "args": ["-y", "vibe-all-coding@latest"],
       "env": {
         "ANTHROPIC_API_KEY": "your-anthropic-api-key-here",
-        "NOTION_API_KEY": "your-notion-integration-token-here"
+        "NOTION_API_KEY": "your-notion-integration-token-here",
+        "CHROMA_API_KEY": "your-chroma-api-key-here",
+        "CHROMA_TENANT": "your-chroma-tenant-id",
+        "CHROMA_DATABASE": "your-chroma-database-name"
       }
     }
   }
@@ -89,10 +92,39 @@ To enable Notion features, you'll need to create a Notion integration:
 - Example: `https://notion.so/myworkspace/My-Page-a8aec43384f447ed84390e8e42c2e089`
 - Page ID: `a8aec43384f447ed84390e8e42c2e089`
 
+## Setting Up ChromaDB Cloud Integration
+
+The vibe-all-coding server uses ChromaDB for vector storage to save and retrieve task examples with embeddings. You'll need a ChromaDB Cloud account.
+
+### 1. Create a ChromaDB Cloud Account
+
+1. Visit [https://docs.trychroma.com/cloud/getting-started](https://docs.trychroma.com/cloud/getting-started)
+2. Sign up for a ChromaDB Cloud account
+3. Create a new database and tenant for your project
+
+### 2. Get Your ChromaDB Credentials
+
+From your ChromaDB Cloud dashboard, you'll need:
+- **API Key**: Your authentication token
+- **Tenant ID**: Your unique tenant identifier 
+- **Database Name**: The database you want to use (e.g., "vibeallcoding")
+
+### 3. Set Your ChromaDB Environment Variables
+
+Add these to your environment configuration:
+- `CHROMA_API_KEY`: Your ChromaDB Cloud API key
+- `CHROMA_TENANT`: Your tenant ID
+- `CHROMA_DATABASE`: Your database name
+
+Note: Embeddings are automatically generated using ChromaDB's default embedding function, so no additional API keys are required for vector operations.
+
 ## Environment Variables
 
 - `ANTHROPIC_API_KEY`: Required for the suggest_issues tool to work with Claude AI
 - `NOTION_API_KEY`: Required for Notion integration features
+- `CHROMA_API_KEY`: Required for ChromaDB vector storage (for task examples)
+- `CHROMA_TENANT`: Your ChromaDB tenant ID
+- `CHROMA_DATABASE`: Your ChromaDB database name
 
 ## Tools Available
 
