@@ -21,6 +21,7 @@
     "@types/node": "^20.0.0"
   },
   "dependencies": {
-    "zod": "^3.25.64"
+    "zod": "^3.25.64",
+    "chromadb": "^3.0.3"
   }
 }
