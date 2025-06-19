@@ -1,5 +1,5 @@
-import { ChromaClient } from 'chromadb';
-import { OpenAI } from 'openai';
+import { CloudClient } from 'chromadb';
+import { DefaultEmbeddingFunction } from '@chroma-core/default-embed';
 import { z } from 'zod';
 
 // Schema for storing task examples
@@ -12,48 +12,51 @@ export const TaskExampleSchema = z.object({
 export type TaskExample = z.infer<typeof TaskExampleSchema>;
 
 // Environment variables for ChromaDB configuration
-const CHROMA_URL = process.env.CHROMA_URL;
-const CHROMA_AUTH_TOKEN = process.env.CHROMA_AUTH_TOKEN;
+const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
+const CHROMA_TENANT = process.env.CHROMA_TENANT;
+const CHROMA_DATABASE = process.env.CHROMA_DATABASE;
 
-if (!CHROMA_URL) {
-  throw new Error('CHROMA_URL environment variable is required. Please set up your Chroma Cloud account.');
+if (!CHROMA_API_KEY) {
+  throw new Error('CHROMA_API_KEY environment variable is required. Please set up your Chroma Cloud account.');
 }
 
-if (!CHROMA_AUTH_TOKEN) {
-  throw new Error('CHROMA_AUTH_TOKEN environment variable is required. Please set up your Chroma Cloud account.');
+if (!CHROMA_TENANT) {
+  throw new Error('CHROMA_TENANT environment variable is required. Please set up your Chroma Cloud account.');
 }
 
-// OpenAI client for embeddings
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+if (!CHROMA_DATABASE) {
+  throw new Error('CHROMA_DATABASE environment variable is required. Please set up your Chroma Cloud account.');
+}
 
 export class TaskExampleStore {
-  private client: ChromaClient;
+  private client: CloudClient;
   private collection: any;
+  private embedder: DefaultEmbeddingFunction;
 
   constructor() {
-    // Configure client for Chroma Cloud
-    this.client = new ChromaClient({
-      path: CHROMA_URL,
-      auth: {
-        provider: "token",
-        credentials: CHROMA_AUTH_TOKEN,
-        tokenHeaderType: "AUTHORIZATION"
-      }
+    // Configure ChromaDB Cloud client
+    this.client = new CloudClient({
+      apiKey: CHROMA_API_KEY,
+      tenant: CHROMA_TENANT,
+      database: CHROMA_DATABASE
     });
+
+    // Initialize embedding function
+    this.embedder = new DefaultEmbeddingFunction();
   }
 
   async initialize() {
     try {
       this.collection = await this.client.createCollection({
         name: "task_examples",
-        metadata: { "hnsw:space": "cosine" }
+        metadata: { "hnsw:space": "cosine" },
+        embeddingFunction: this.embedder
       });
     } catch (error) {
       // Collection might already exist
       this.collection = await this.client.getCollection({
-        name: "task_examples"
+        name: "task_examples",
+        embeddingFunction: this.embedder
       });
     }
   }
@@ -63,33 +66,20 @@ export class TaskExampleStore {
       await this.initialize();
     }
 
-    // Create embedding for the task description
-    const embedding = await this.createEmbedding(example.task);
-    
     // Generate unique ID
     const id = `example_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     await this.collection.add({
       ids: [id],
-      embeddings: [embedding],
       metadatas: [{
         task: example.task,
         context: example.context,
         issues: example.issues,
         created_at: new Date().toISOString()
       }],
-      documents: [example.task] // Store task as document for search
+      documents: [example.task] // Store task as document for search - embeddings auto-generated
     });
 
     return id;
-  }
-
-  private async createEmbedding(text: string): Promise<number[]> {
-    const response = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text,
-    });
-    
-    return response.data[0].embedding;
   }
 }
