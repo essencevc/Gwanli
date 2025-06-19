@@ -1,2 +1,7 @@
 node_modules/
 test.ts
+.env
+*.log
+.DS_Store
+dist/
+build/
