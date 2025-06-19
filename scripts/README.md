@@ -1,8 +1,8 @@
 # Scripts
 
-## download-notion-pages.ts
+## list-notion-pages.ts
 
-Downloads all accessible Notion pages for a user and saves them as markdown files.
+Lists all accessible Notion pages for a user and prints their IDs and titles.
 
 ### Setup Notion Integration
 
@@ -35,23 +35,17 @@ If successful, you'll see a JSON response with your accessible pages.
 2. Run the script:
    ```bash
    cd scripts
-   bun download-notion-pages.ts
+   bun list-notion-pages.ts
    ```
 
 ### Output
 
-- Creates a `data/` directory in the project root
-- Saves each page as `data/<page_id>.md`
-- Includes metadata (title, creation date, last edited) in frontmatter
-- Converts Notion blocks to markdown format
+The script will print each page ID and title:
 
-### Supported Block Types
+```
+Found 3 pages:
 
-- Paragraphs
-- Headings (H1, H2, H3)
-- Lists (bulleted, numbered)
-- Todo items
-- Code blocks
-- Quotes
-- Dividers
-- Nested blocks (with indentation)
+216730a8-3bea-8055-b8fa-e96018e3e848 - Home
+216730a8-3bea-8150-8ce5-fa3662679809 - Kura - Updated  
+216730a8-3bea-8131-8040-f4625f248a04 - Kura
+```
