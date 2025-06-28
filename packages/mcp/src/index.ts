@@ -45,45 +45,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  try {
-    // Type-safe tool lookup
-    const toolName = name as ToolName;
-    const tool = getToolByName(toolName);
-    
-    if (!tool) {
+  // Type-safe tool lookup
+  const toolName = name as ToolName;
+  const tool = getToolByName(toolName);
+  
+  if (!tool) {
+    throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+  }
+
+  // Validate input with the tool's Zod schema
+  const validatedArgs = tool.inputSchema.parse(args);
+
+  // Route to appropriate handler
+  switch (tool.name) {
+    case "suggest_issues":
+      return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
+
+    case "save_task_example":
+      return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
+
+    default:
+      // TypeScript will ensure this is never reached
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
-    }
-
-    // Validate input with the tool's Zod schema
-    const validatedArgs = tool.inputSchema.parse(args);
-
-    // Route to appropriate handler
-    switch (tool.name) {
-      case "suggest_issues":
-        return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
-
-      case "save_task_example":
-        return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
-
-      default:
-        // TypeScript will ensure this is never reached
-        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
-    }
-  } catch (error) {
-    // Handle Zod validation errors gracefully
-    if (error instanceof Error && error.name === 'ZodError') {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Validation error: ${error.message}`,
-          },
-        ],
-      };
-    }
-    
-    // Re-throw other errors
-    throw error;
   }
 });
 
