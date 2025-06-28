@@ -70,30 +70,12 @@ const SAVE_TASK_EXAMPLE_TOOL = {
   },
 };
 
-const FETCH_SIMILAR_EXAMPLES_TOOL = {
-  name: "fetch_similar_examples",
-  description: "Fetch similar task examples from ChromaDB based on semantic similarity",
-  inputSchema: {
-    type: "object",
-    properties: {
-      taskDescription: {
-        type: "string",
-        description: "The task description to find similar examples for",
-      },
-      n_examples: {
-        type: "number",
-        description: "Number of similar examples to fetch (default: 3)",
-        default: 3,
-      },
-    },
-    required: ["taskDescription"],
-  },
-};
+
 
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [SUGGEST_ISSUES_TOOL, SAVE_TASK_EXAMPLE_TOOL, FETCH_SIMILAR_EXAMPLES_TOOL],
+    tools: [SUGGEST_ISSUES_TOOL, SAVE_TASK_EXAMPLE_TOOL],
   };
 });
 
@@ -160,56 +142,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (name === "fetch_similar_examples") {
-    try {
-      const { taskDescription, n_examples = 3 } = args as {
-        taskDescription: string;
-        n_examples?: number;
-      };
 
-      const examples = await taskStore.searchSimilarExamples(taskDescription, n_examples);
-      
-      if (examples.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "No similar examples found in the database.",
-            },
-          ],
-        };
-      }
-
-      // Format the examples for display
-      const examplesText = examples
-        .map((example, i) => {
-          return `## Example ${i + 1} (Similarity: ${(example.similarity * 100).toFixed(1)}%)
-
-${example.document}
-
----`;
-        })
-        .join("\n\n");
-
-      return {
-        content: [
-          {
-            type: "text", 
-            text: `Found ${examples.length} similar examples:\n\n${examplesText}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error fetching similar examples: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          },
-        ],
-      };
-    }
-  }
 
   throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
 });
