@@ -1,15 +1,6 @@
 import { CloudClient } from "chromadb";
 import { DefaultEmbeddingFunction } from "@chroma-core/default-embed";
-import { z } from "zod";
-
-// Schema for storing task examples
-export const TaskExampleSchema = z.object({
-  task: z.string(),
-  context: z.string(),
-  issues: z.string(),
-});
-
-export type TaskExample = z.infer<typeof TaskExampleSchema>;
+import { TaskExampleStorage, TaskExample, SearchResult } from "./storage-interface.js";
 
 // Environment variables for ChromaDB configuration
 const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
@@ -34,12 +25,14 @@ if (!CHROMA_DATABASE) {
   );
 }
 
-export class TaskExampleStore {
+export class ChromaTaskExampleStore extends TaskExampleStorage {
   private client: CloudClient;
   private collection: any;
   private embedder: DefaultEmbeddingFunction;
 
   constructor() {
+    super();
+    
     // Configure ChromaDB Cloud client
     this.client = new CloudClient({
       apiKey: CHROMA_API_KEY,
@@ -67,22 +60,21 @@ export class TaskExampleStore {
     }
   }
 
-  async addExample(example: TaskExample) {
+  async addExample(example: TaskExample): Promise<string> {
+    const validatedExample = this.validateExample(example);
+    
     if (!this.collection) {
       await this.initialize();
     }
 
-    // Generate unique ID
-    const id = `example_${Date.now()}_${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+    const id = this.generateId();
 
     // Create a comprehensive document that includes all example data
-    const document = `Task: ${example.task}
+    const document = `Task: ${validatedExample.task}
 
-Context: ${example.context}
+Context: ${validatedExample.context}
 
-Issues Generated: ${example.issues}`;
+Issues Generated: ${validatedExample.issues}`;
 
     await this.collection.add({
       ids: [id],
@@ -95,5 +87,35 @@ Issues Generated: ${example.issues}`;
     });
 
     return id;
+  }
+
+  async searchSimilarExamples(query: string, nExamples: number = 3): Promise<SearchResult[]> {
+    if (!this.collection) {
+      await this.initialize();
+    }
+
+    // Use the task query to find similar examples
+    const results = await this.collection.query({
+      queryTexts: [query],
+      nResults: nExamples,
+    });
+
+    // Return documents directly, already ordered by similarity
+    const examples: SearchResult[] = [];
+    if (results.documents && results.documents[0]) {
+      for (let i = 0; i < results.documents[0].length; i++) {
+        const document = results.documents[0][i];
+        const distance = results.distances?.[0]?.[i];
+        const metadata = results.metadatas?.[0]?.[i];
+        
+        examples.push({
+          document: document,
+          similarity: distance ? 1 - distance : 0, // Convert distance to similarity
+          metadata: metadata,
+        });
+      }
+    }
+
+    return examples;
   }
 }
