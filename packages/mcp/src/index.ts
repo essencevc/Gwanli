@@ -8,8 +8,8 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { generate_plan } from "./lib/plan.js";
 import { ChromaTaskExampleStore } from "./lib/chroma.js";
+import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
 import {
   Tools,
   toolToMcp,
@@ -41,7 +41,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Handle tool calls with type-safe Zod validation
+// Handle tool calls with type-safe routing
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
@@ -57,52 +57,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Validate input with the tool's Zod schema
     const validatedArgs = tool.inputSchema.parse(args);
 
+    // Route to appropriate handler
     switch (tool.name) {
-      case "suggest_issues": {
-        const typedArgs = validatedArgs as SuggestIssuesInput;
-        
-        const plan = await generate_plan(typedArgs.taskDescription, typedArgs.context);
+      case "suggest_issues":
+        return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
 
-        if (plan.needsClarification) {
-          return {
-            content: [{ type: "text", text: plan.clarification_message }],
-          };
-        }
-
-        if (plan.suggested_issues.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Unable to generate issues. Please try again.",
-              },
-            ],
-          };
-        }
-
-        const issuesText = plan.suggested_issues
-          .map((issue: string, i: number) => `${i + 1}. ${issue}`)
-          .join("\n");
-
-        return {
-          content: [{ type: "text", text: issuesText }],
-        };
-      }
-
-      case "save_task_example": {
-        const typedArgs = validatedArgs as SaveTaskExampleInput;
-        
-        const id = await taskStore.addExample(typedArgs);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Task example saved successfully with ID: ${id}`,
-            },
-          ],
-        };
-      }
+      case "save_task_example":
+        return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
 
       default:
         // TypeScript will ensure this is never reached
