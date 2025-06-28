@@ -11,8 +11,10 @@ import {
 import { generate_plan } from "./lib/plan.js";
 import { ChromaTaskExampleStore } from "./lib/chroma.js";
 import {
-  SuggestIssuesInputSchema,
-  SaveTaskExampleInputSchema,
+  Tools,
+  toolToMcp,
+  getToolByName,
+  type ToolName,
   type SuggestIssuesInput,
   type SaveTaskExampleInput,
 } from "./schemas.js";
@@ -32,66 +34,34 @@ const server = new Server(
 // Initialize task example store
 const taskStore = new ChromaTaskExampleStore();
 
-// Define tool schemas with Zod validation
-const TOOLS = [
-  {
-    name: "suggest_issues",
-    description: "Break down a task or feature request into actionable issues",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskDescription: {
-          type: "string",
-          description: "The task or feature request to break down into issues",
-        },
-        context: {
-          type: "string",
-          description: "Additional context about the codebase or project",
-        },
-      },
-      required: ["taskDescription"],
-    },
-  },
-  {
-    name: "save_task_example",
-    description: "Save a task example with context and issues for future reference",
-    inputSchema: {
-      type: "object",
-      properties: {
-        task: {
-          type: "string",
-          description: "The task or feature description",
-        },
-        context: {
-          type: "string",
-          description: "Additional context about the task",
-        },
-        issues: {
-          type: "string",
-          description: "Generated issues or breakdown for the task",
-        },
-      },
-      required: ["task", "context", "issues"],
-    },
-  },
-] as const;
-
-// List available tools
+// List available tools - convert Zod schemas to MCP format
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
+  return {
+    tools: Tools.map(toolToMcp),
+  };
 });
 
-// Handle tool calls with Zod validation
+// Handle tool calls with type-safe Zod validation
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    switch (name) {
+    // Type-safe tool lookup
+    const toolName = name as ToolName;
+    const tool = getToolByName(toolName);
+    
+    if (!tool) {
+      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+    }
+
+    // Validate input with the tool's Zod schema
+    const validatedArgs = tool.inputSchema.parse(args);
+
+    switch (tool.name) {
       case "suggest_issues": {
-        // Validate input with Zod
-        const validatedArgs: SuggestIssuesInput = SuggestIssuesInputSchema.parse(args);
+        const typedArgs = validatedArgs as SuggestIssuesInput;
         
-        const plan = await generate_plan(validatedArgs.taskDescription, validatedArgs.context);
+        const plan = await generate_plan(typedArgs.taskDescription, typedArgs.context);
 
         if (plan.needsClarification) {
           return {
@@ -120,10 +90,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_task_example": {
-        // Validate input with Zod
-        const validatedArgs: SaveTaskExampleInput = SaveTaskExampleInputSchema.parse(args);
+        const typedArgs = validatedArgs as SaveTaskExampleInput;
         
-        const id = await taskStore.addExample(validatedArgs);
+        const id = await taskStore.addExample(typedArgs);
 
         return {
           content: [
@@ -136,6 +105,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       default:
+        // TypeScript will ensure this is never reached
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
   } catch (error) {
