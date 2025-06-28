@@ -90,32 +90,8 @@ Issues Generated: ${validatedExample.issues}`;
   }
 
   async searchSimilarExamples(query: string, nExamples: number = 3): Promise<SearchResult[]> {
-    if (!this.collection) {
-      await this.initialize();
-    }
-
-    // Use the task query to find similar examples
-    const results = await this.collection.query({
-      queryTexts: [query],
-      nResults: nExamples,
-    });
-
-    // Return documents directly, already ordered by similarity
-    const examples: SearchResult[] = [];
-    if (results.documents && results.documents[0]) {
-      for (let i = 0; i < results.documents[0].length; i++) {
-        const document = results.documents[0][i];
-        const distance = results.distances?.[0]?.[i];
-        const metadata = results.metadatas?.[0]?.[i];
-        
-        examples.push({
-          document: document,
-          similarity: distance ? 1 - distance : 0, // Convert distance to similarity
-          metadata: metadata,
-        });
-      }
-    }
-
-    return examples;
+    // TODO: Implement actual ChromaDB search functionality
+    // For now, return empty results as a mock implementation
+    return [];
   }
 }

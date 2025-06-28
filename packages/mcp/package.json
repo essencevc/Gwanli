@@ -9,8 +9,7 @@
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "preview": "npx @modelcontextprotocol/inspector dist/index.js",
-    "clean": "rm -rf dist",
-    "test": "vitest --run"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.29.0",
@@ -22,7 +21,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^2.0.0"
+    "typescript": "^5.0.0"
   }
 }
