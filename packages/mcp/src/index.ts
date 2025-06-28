@@ -8,9 +8,14 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import { generate_plan } from "./lib/plan.js";
-import { TaskExampleStore, TaskExampleSchema } from "./lib/chroma.js";
+import { ChromaTaskExampleStore } from "./lib/chroma.js";
+import {
+  SuggestIssuesInputSchema,
+  SaveTaskExampleInputSchema,
+  type SuggestIssuesInput,
+  type SaveTaskExampleInput,
+} from "./schemas.js";
 
 const server = new Server(
   {
@@ -25,126 +30,130 @@ const server = new Server(
 );
 
 // Initialize task example store
-const taskStore = new TaskExampleStore();
+const taskStore = new ChromaTaskExampleStore();
 
-// Define tool schemas
-const SUGGEST_ISSUES_TOOL = {
-  name: "suggest_issues",
-  description: "Break down a task or feature request into actionable issues",
-  inputSchema: {
-    type: "object",
-    properties: {
-      taskDescription: {
-        type: "string",
-        description: "The task or feature request to break down into issues",
+// Define tool schemas with Zod validation
+const TOOLS = [
+  {
+    name: "suggest_issues",
+    description: "Break down a task or feature request into actionable issues",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskDescription: {
+          type: "string",
+          description: "The task or feature request to break down into issues",
+        },
+        context: {
+          type: "string",
+          description: "Additional context about the codebase or project",
+        },
       },
-      context: {
-        type: "string",
-        description: "Additional context about the codebase or project",
-      },
+      required: ["taskDescription"],
     },
-    required: ["taskDescription"],
   },
-};
-
-const SAVE_TASK_EXAMPLE_TOOL = {
-  name: "save_task_example",
-  description: "Save a task example with context and issues for future reference",
-  inputSchema: {
-    type: "object",
-    properties: {
-      task: {
-        type: "string",
-        description: "The task or feature description",
+  {
+    name: "save_task_example",
+    description: "Save a task example with context and issues for future reference",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: "The task or feature description",
+        },
+        context: {
+          type: "string",
+          description: "Additional context about the task",
+        },
+        issues: {
+          type: "string",
+          description: "Generated issues or breakdown for the task",
+        },
       },
-      context: {
-        type: "string", 
-        description: "Additional context about the task",
-      },
-      issues: {
-        type: "string",
-        description: "Generated issues or breakdown for the task",
-      },
+      required: ["task", "context", "issues"],
     },
-    required: ["task", "context", "issues"],
   },
-};
-
-
+] as const;
 
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [SUGGEST_ISSUES_TOOL, SAVE_TASK_EXAMPLE_TOOL],
-  };
+  return { tools: TOOLS };
 });
 
-// Handle tool calls
+// Handle tool calls with Zod validation
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (name === "suggest_issues") {
-    const { taskDescription, context = "" } = args as {
-      taskDescription: string;
-      context?: string;
-    };
+  try {
+    switch (name) {
+      case "suggest_issues": {
+        // Validate input with Zod
+        const validatedArgs: SuggestIssuesInput = SuggestIssuesInputSchema.parse(args);
+        
+        const plan = await generate_plan(validatedArgs.taskDescription, validatedArgs.context);
 
-    const plan = await generate_plan(taskDescription, context);
+        if (plan.needsClarification) {
+          return {
+            content: [{ type: "text", text: plan.clarification_message }],
+          };
+        }
 
-    if (plan.needsClarification) {
-      return {
-        content: [{ type: "text", text: plan.clarification_message }],
-      };
+        if (plan.suggested_issues.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Unable to generate issues. Please try again.",
+              },
+            ],
+          };
+        }
+
+        const issuesText = plan.suggested_issues
+          .map((issue: string, i: number) => `${i + 1}. ${issue}`)
+          .join("\n");
+
+        return {
+          content: [{ type: "text", text: issuesText }],
+        };
+      }
+
+      case "save_task_example": {
+        // Validate input with Zod
+        const validatedArgs: SaveTaskExampleInput = SaveTaskExampleInputSchema.parse(args);
+        
+        const id = await taskStore.addExample(validatedArgs);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Task example saved successfully with ID: ${id}`,
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
-
-    if (plan.suggested_issues.length === 0) {
+  } catch (error) {
+    // Handle Zod validation errors gracefully
+    if (error instanceof Error && error.name === 'ZodError') {
       return {
         content: [
           {
             type: "text",
-            text: "Unable to generate issues. Please try again.",
+            text: `Validation error: ${error.message}`,
           },
         ],
       };
     }
-
-    const issuesText = plan.suggested_issues
-      .map((issue: string, i: number) => `${i + 1}. ${issue}`)
-      .join("\n");
-
-    return {
-      content: [{ type: "text", text: issuesText }],
-    };
+    
+    // Re-throw other errors
+    throw error;
   }
-
-  if (name === "save_task_example") {
-    try {
-      const example = TaskExampleSchema.parse(args);
-      const id = await taskStore.addExample(example);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Task example saved successfully with ID: ${id}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error saving task example: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          },
-        ],
-      };
-    }
-  }
-
-
-
-  throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
 });
 
 async function main() {
