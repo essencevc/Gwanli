@@ -8,9 +8,16 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
-import { generate_plan } from "./lib/plan.js";
-import { TaskExampleStore, TaskExampleSchema } from "./lib/chroma.js";
+import { ChromaTaskExampleStore } from "./lib/chroma.js";
+import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
+import {
+  Tools,
+  toolToMcp,
+  getToolByName,
+  type ToolName,
+  type SuggestIssuesInput,
+  type SaveTaskExampleInput,
+} from "./schemas.js";
 
 const server = new Server(
   {
@@ -25,126 +32,43 @@ const server = new Server(
 );
 
 // Initialize task example store
-const taskStore = new TaskExampleStore();
+const taskStore = new ChromaTaskExampleStore();
 
-// Define tool schemas
-const SUGGEST_ISSUES_TOOL = {
-  name: "suggest_issues",
-  description: "Break down a task or feature request into actionable issues",
-  inputSchema: {
-    type: "object",
-    properties: {
-      taskDescription: {
-        type: "string",
-        description: "The task or feature request to break down into issues",
-      },
-      context: {
-        type: "string",
-        description: "Additional context about the codebase or project",
-      },
-    },
-    required: ["taskDescription"],
-  },
-};
-
-const SAVE_TASK_EXAMPLE_TOOL = {
-  name: "save_task_example",
-  description: "Save a task example with context and issues for future reference",
-  inputSchema: {
-    type: "object",
-    properties: {
-      task: {
-        type: "string",
-        description: "The task or feature description",
-      },
-      context: {
-        type: "string", 
-        description: "Additional context about the task",
-      },
-      issues: {
-        type: "string",
-        description: "Generated issues or breakdown for the task",
-      },
-    },
-    required: ["task", "context", "issues"],
-  },
-};
-
-
-
-// List available tools
+// List available tools - convert Zod schemas to MCP format
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [SUGGEST_ISSUES_TOOL, SAVE_TASK_EXAMPLE_TOOL],
+    tools: Tools.map(toolToMcp),
   };
 });
 
-// Handle tool calls
+// Handle tool calls with type-safe routing
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (name === "suggest_issues") {
-    const { taskDescription, context = "" } = args as {
-      taskDescription: string;
-      context?: string;
-    };
-
-    const plan = await generate_plan(taskDescription, context);
-
-    if (plan.needsClarification) {
-      return {
-        content: [{ type: "text", text: plan.clarification_message }],
-      };
-    }
-
-    if (plan.suggested_issues.length === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Unable to generate issues. Please try again.",
-          },
-        ],
-      };
-    }
-
-    const issuesText = plan.suggested_issues
-      .map((issue: string, i: number) => `${i + 1}. ${issue}`)
-      .join("\n");
-
-    return {
-      content: [{ type: "text", text: issuesText }],
-    };
+  // Type-safe tool lookup
+  const toolName = name as ToolName;
+  const tool = getToolByName(toolName);
+  
+  if (!tool) {
+    throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
 
-  if (name === "save_task_example") {
-    try {
-      const example = TaskExampleSchema.parse(args);
-      const id = await taskStore.addExample(example);
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Task example saved successfully with ID: ${id}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error saving task example: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          },
-        ],
-      };
-    }
+  // Validate input with the tool's Zod schema
+  const validatedArgs = tool.inputSchema.parse(args);
+
+  // Route to appropriate handler with exhaustive matching
+  switch (tool.name) {
+    case "suggest_issues":
+      return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
+
+    case "save_task_example":
+      return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
+
+    default:
+      // Exhaustive check - TypeScript will error if we miss a case
+      const _exhaustiveCheck: never = tool.name;
+      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
-
-
-
-  throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
 });
 
 async function main() {
