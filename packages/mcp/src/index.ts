@@ -70,6 +70,8 @@ const SAVE_TASK_EXAMPLE_TOOL = {
   },
 };
 
+
+
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -139,6 +141,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
   }
+
+
 
   throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
 });

@@ -1,15 +1,7 @@
 import { CloudClient } from "chromadb";
 import { DefaultEmbeddingFunction } from "@chroma-core/default-embed";
-import { z } from "zod";
-
-// Schema for storing task examples
-export const TaskExampleSchema = z.object({
-  task: z.string(),
-  context: z.string(),
-  issues: z.string(),
-});
-
-export type TaskExample = z.infer<typeof TaskExampleSchema>;
+import { TaskExampleStorage } from "./storage-interface.js";
+import { TaskExample, SearchResult } from "./types.js";
 
 // Environment variables for ChromaDB configuration
 const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
@@ -34,12 +26,14 @@ if (!CHROMA_DATABASE) {
   );
 }
 
-export class TaskExampleStore {
+export class ChromaTaskExampleStore extends TaskExampleStorage {
   private client: CloudClient;
   private collection: any;
   private embedder: DefaultEmbeddingFunction;
 
   constructor() {
+    super();
+    
     // Configure ChromaDB Cloud client
     this.client = new CloudClient({
       apiKey: CHROMA_API_KEY,
@@ -67,22 +61,21 @@ export class TaskExampleStore {
     }
   }
 
-  async addExample(example: TaskExample) {
+  async addExample(example: TaskExample): Promise<string> {
+    const validatedExample = this.validateExample(example);
+    
     if (!this.collection) {
       await this.initialize();
     }
 
-    // Generate unique ID
-    const id = `example_${Date.now()}_${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+    const id = this.generateId();
 
     // Create a comprehensive document that includes all example data
-    const document = `Task: ${example.task}
+    const document = `Task: ${validatedExample.task}
 
-Context: ${example.context}
+Context: ${validatedExample.context}
 
-Issues Generated: ${example.issues}`;
+Issues Generated: ${validatedExample.issues}`;
 
     await this.collection.add({
       ids: [id],
@@ -95,5 +88,11 @@ Issues Generated: ${example.issues}`;
     });
 
     return id;
+  }
+
+  async searchSimilarExamples(query: string, nExamples: number = 3): Promise<SearchResult[]> {
+    // TODO: Implement actual ChromaDB search functionality
+    // For now, return empty results as a mock implementation
+    return [];
   }
 }
