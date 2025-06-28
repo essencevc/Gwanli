@@ -1,6 +1,7 @@
 import { CloudClient } from "chromadb";
 import { DefaultEmbeddingFunction } from "@chroma-core/default-embed";
-import { TaskExampleStorage, TaskExample, SearchResult } from "./storage-interface.js";
+import { TaskExampleStorage } from "./storage-interface.js";
+import { TaskExample, SearchResult } from "./types.js";
 
 // Environment variables for ChromaDB configuration
 const CHROMA_API_KEY = process.env.CHROMA_API_KEY;

@@ -1,20 +1,4 @@
-import { z } from "zod";
-
-// Schema for storing task examples
-export const TaskExampleSchema = z.object({
-  task: z.string(),
-  context: z.string(),
-  issues: z.string(),
-});
-
-export type TaskExample = z.infer<typeof TaskExampleSchema>;
-
-// Search result type for storage implementations
-export interface SearchResult {
-  document: string;
-  similarity: number;
-  metadata?: Record<string, any>;
-}
+import { TaskExample, TaskExampleSchema, SearchResult } from "./types.js";
 
 /**
  * Abstract base class for task example storage implementations.
