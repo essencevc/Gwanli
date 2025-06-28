@@ -56,7 +56,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Validate input with the tool's Zod schema
   const validatedArgs = tool.inputSchema.parse(args);
 
-  // Route to appropriate handler
+  // Route to appropriate handler with exhaustive matching
   switch (tool.name) {
     case "suggest_issues":
       return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
@@ -65,7 +65,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
 
     default:
-      // TypeScript will ensure this is never reached
+      // Exhaustive check - TypeScript will error if we miss a case
+      const _exhaustiveCheck: never = tool.name;
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
 });
