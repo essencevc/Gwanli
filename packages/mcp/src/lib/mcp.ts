@@ -1,6 +1,6 @@
 import type { SuggestIssuesInput, SaveTaskExampleInput } from "../schemas.js";
 import { generate_plan } from "./plan.js";
-import type { ChromaTaskExampleStore } from "./chroma.js";
+import type { TaskExampleStorage } from "./storage-interface.js";
 
 // Tool implementation functions with dependencies passed in
 
@@ -35,7 +35,7 @@ export async function handleSuggestIssues(args: SuggestIssuesInput) {
 
 export async function handleSaveTaskExample(
   args: SaveTaskExampleInput,
-  taskStore: ChromaTaskExampleStore
+  taskStore: TaskExampleStorage
 ) {
   const id = await taskStore.addExample(args);
 

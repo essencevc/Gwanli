@@ -8,7 +8,8 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ChromaTaskExampleStore } from "./lib/chroma.js";
+import { initializeTaskStore } from "./lib/env.js";
+import { TaskExampleStorage } from "./lib/storage-interface.js";
 import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
 import {
   Tools,
@@ -18,6 +19,9 @@ import {
   type SuggestIssuesInput,
   type SaveTaskExampleInput,
 } from "./schemas.js";
+
+// Initialize task storage
+const taskStore: TaskExampleStorage = initializeTaskStore();
 
 const server = new Server(
   {
@@ -30,9 +34,6 @@ const server = new Server(
     },
   }
 );
-
-// Initialize task example store
-const taskStore = new ChromaTaskExampleStore();
 
 // List available tools - convert Zod schemas to MCP format
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -48,7 +49,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Type-safe tool lookup
   const toolName = name as ToolName;
   const tool = getToolByName(toolName);
-  
+
   if (!tool) {
     throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
@@ -62,11 +63,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
 
     case "save_task_example":
-      return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
+      return await handleSaveTaskExample(
+        validatedArgs as SaveTaskExampleInput,
+        taskStore
+      );
 
     default:
-      // Exhaustive check - TypeScript will error if we miss a case
-      const _exhaustiveCheck: never = tool.name;
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
 });
