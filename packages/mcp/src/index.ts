@@ -8,7 +8,7 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { validateEnv, isChromaConfig } from "@vibeallcoding/core";
+import { validateEnv, isChromaConfig } from "./lib/env.js";
 import { ChromaTaskExampleStore } from "./lib/chroma.js";
 import { SqliteTaskExampleStore } from "./lib/sqlite.js";
 import { TaskExampleStorage } from "./lib/storage-interface.js";
