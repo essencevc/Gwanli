@@ -1,6 +1,8 @@
-import type { SuggestIssuesInput, SaveTaskExampleInput } from "../schemas.js";
+import type { SuggestIssuesInput, SaveTaskExampleInput, SearchNotionInput } from "../schemas.js";
 import { generate_plan } from "./plan.js";
 import type { TaskExampleStorage } from "./storage-interface.js";
+import { convertNotionPageToMarkdown } from "./notion-to-markdown.js";
+import { Client } from '@notionhq/client';
 
 // Tool implementation functions with dependencies passed in
 
@@ -47,4 +49,10 @@ export async function handleSaveTaskExample(
       },
     ],
   };
+}
+
+export async function handleSearchNotion(args: SearchNotionInput) {
+  // For now, throw an error indicating that no Notion index exists
+  // In the future, this will check if an index exists and create one if not
+  throw new Error("No Notion index found. Index creation not yet implemented. Please run index creation first.");
 }

@@ -21,11 +21,20 @@ export const SaveTaskExampleTool = {
   }),
 } as const;
 
+export const SearchNotionTool = {
+  name: "search_notion" as const,
+  description: "Search through indexed Notion pages. Creates index on first use if not exists.",
+  inputSchema: z.object({
+    query: z.string().min(1, "Search query is required"),
+    notionToken: z.string().min(1, "Notion token is required"),
+  }),
+} as const;
+
 // Create union of all tools
-export const Tools = [SuggestIssuesTool, SaveTaskExampleTool] as const;
+export const Tools = [SuggestIssuesTool, SaveTaskExampleTool, SearchNotionTool] as const;
 
 // Helper to convert tool to MCP format
-export function toolToMcp(tool: typeof SuggestIssuesTool | typeof SaveTaskExampleTool) {
+export function toolToMcp(tool: typeof SuggestIssuesTool | typeof SaveTaskExampleTool | typeof SearchNotionTool) {
   return {
     name: tool.name,
     description: tool.description,
@@ -44,3 +53,4 @@ export function getToolByName<T extends ToolName>(name: T) {
 // Inferred input types
 export type SuggestIssuesInput = z.infer<typeof SuggestIssuesTool.inputSchema>;
 export type SaveTaskExampleInput = z.infer<typeof SaveTaskExampleTool.inputSchema>;
+export type SearchNotionInput = z.infer<typeof SearchNotionTool.inputSchema>;
