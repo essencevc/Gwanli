@@ -92,20 +92,18 @@ export class SQLiteTaskExampleStorage extends TaskExampleStorage {
     }
 
     if (!query.trim()) {
-      return [];
+      // Return most recent examples if no query provided
+      return this.getFallbackResults([], nExamples);
     }
 
-    // Use FTS5 search with highlighting and ranking
+    // Use FTS5 search with ranking
     const stmt = this.db.prepare(`
       SELECT 
         te.id,
         te.task,
         te.context,
         te.issues,
-        fts.rank,
-        highlight(task_examples_fts, 1, '<b>', '</b>') as task_highlight,
-        highlight(task_examples_fts, 2, '<b>', '</b>') as context_highlight,
-        highlight(task_examples_fts, 3, '<b>', '</b>') as issues_highlight
+        fts.rank
       FROM task_examples_fts fts
       JOIN task_examples te ON te.rowid = fts.rowid
       WHERE task_examples_fts MATCH ?
@@ -126,37 +124,75 @@ export class SQLiteTaskExampleStorage extends TaskExampleStorage {
       context: string;
       issues: string;
       rank: number;
-      task_highlight: string;
-      context_highlight: string;
-      issues_highlight: string;
     }>;
 
-    return rows.map(row => ({
+    const results = rows.map(row => ({
       document: `Task: ${row.task}\nContext: ${row.context}\nIssues: ${row.issues}`,
-      similarity: this.calculateSimilarity(row.rank),
+      similarity: Math.abs(row.rank),
       metadata: {
         id: row.id,
         task: row.task,
         context: row.context,
-        issues: row.issues,
-        task_highlight: row.task_highlight,
-        context_highlight: row.context_highlight,
-        issues_highlight: row.issues_highlight
+        issues: row.issues
       }
     }));
+
+    // If we don't have enough results, add fallback results
+    if (results.length < nExamples) {
+      return this.getFallbackResults(results, nExamples);
+    }
+
+    return results;
   }
 
   /**
-   * Convert FTS5 rank to a similarity score between 0 and 1.
-   * FTS5 rank is negative, with higher absolute values being better matches.
+   * Get fallback results to ensure we always return nExamples results.
+   * Uses most recent examples that aren't already in the results.
    */
-  private calculateSimilarity(rank: number): number {
-    // Convert negative rank to positive similarity score
-    // Higher absolute rank values become higher similarity scores
-    const absRank = Math.abs(rank);
-    // Normalize to 0-1 range (this is a simple heuristic)
-    return Math.min(1, absRank / 10);
+  private getFallbackResults(existingResults: SearchResult[], nExamples: number): SearchResult[] {
+    if (!this.db) {
+      return existingResults;
+    }
+
+    const needed = nExamples - existingResults.length;
+    if (needed <= 0) {
+      return existingResults;
+    }
+
+    // Get existing IDs to exclude
+    const existingIds = existingResults.map(r => r.metadata?.id).filter((id): id is string => Boolean(id));
+    const placeholders = existingIds.length > 0 ? existingIds.map(() => '?').join(',') : '';
+    
+    const fallbackStmt = this.db.prepare(`
+      SELECT id, task, context, issues
+      FROM task_examples
+      ${existingIds.length > 0 ? `WHERE id NOT IN (${placeholders})` : ''}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+
+    const fallbackRows = fallbackStmt.all(...existingIds, needed) as Array<{
+      id: string;
+      task: string;
+      context: string;
+      issues: string;
+    }>;
+
+    const fallbackResults = fallbackRows.map(row => ({
+      document: `Task: ${row.task}\nContext: ${row.context}\nIssues: ${row.issues}`,
+      similarity: 0.1, // Low similarity score for fallback results
+      metadata: {
+        id: row.id,
+        task: row.task,
+        context: row.context,
+        issues: row.issues
+      }
+    }));
+
+    return [...existingResults, ...fallbackResults];
   }
+
+
 
   /**
    * Close the database connection.
