@@ -1,39 +1,25 @@
 import { CloudClient } from "chromadb";
-import { DefaultEmbeddingFunction } from "@chroma-core/default-embed";
 import { TaskExampleStorage } from "./storage-interface.js";
 import { TaskExample, SearchResult } from "./types.js";
-
-// Environment variables for ChromaDB configuration
-const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
-const CHROMA_TENANT = process.env.CHROMA_TENANT;
-const CHROMA_DATABASE = process.env.CHROMA_DATABASE;
-
-if (!CHROMA_API_KEY) {
-  throw new Error(
-    "CHROMA_API_KEY environment variable is required. Please set up your Chroma Cloud account."
-  );
-}
-
-if (!CHROMA_TENANT) {
-  throw new Error(
-    "CHROMA_TENANT environment variable is required. Please set up your Chroma Cloud account."
-  );
-}
-
-if (!CHROMA_DATABASE) {
-  throw new Error(
-    "CHROMA_DATABASE environment variable is required. Please set up your Chroma Cloud account."
-  );
-}
+import { isChromaConfig, validateEnv } from "./env.js";
+import { OpenAIEmbeddingFunction } from "@chroma-core/openai";
 
 export class ChromaTaskExampleStore extends TaskExampleStorage {
   private client: CloudClient;
   private collection: any;
-  private embedder: DefaultEmbeddingFunction;
+  private embedder: OpenAIEmbeddingFunction;
 
   constructor() {
     super();
-    
+
+    const { config } = validateEnv();
+
+    if (!isChromaConfig(config)) {
+      throw new Error("Invalid Chroma configuration.");
+    }
+    const { OPENAI_API_KEY, CHROMA_API_KEY, CHROMA_TENANT, CHROMA_DATABASE } =
+      config;
+
     // Configure ChromaDB Cloud client
     this.client = new CloudClient({
       apiKey: CHROMA_API_KEY,
@@ -42,7 +28,10 @@ export class ChromaTaskExampleStore extends TaskExampleStorage {
     });
 
     // Initialize embedding function
-    this.embedder = new DefaultEmbeddingFunction();
+    this.embedder = new OpenAIEmbeddingFunction({
+      apiKey: OPENAI_API_KEY,
+      modelName: "text-embedding-3-small",
+    });
   }
 
   async initialize() {
@@ -63,7 +52,7 @@ export class ChromaTaskExampleStore extends TaskExampleStorage {
 
   async addExample(example: TaskExample): Promise<string> {
     const validatedExample = this.validateExample(example);
-    
+
     if (!this.collection) {
       await this.initialize();
     }
@@ -90,9 +79,27 @@ Issues Generated: ${validatedExample.issues}`;
     return id;
   }
 
-  async searchSimilarExamples(query: string, nExamples: number = 3): Promise<SearchResult[]> {
-    // TODO: Implement actual ChromaDB search functionality
-    // For now, return empty results as a mock implementation
-    return [];
+  async searchSimilarExamples(
+    query: string,
+    nExamples: number = 3
+  ): Promise<SearchResult[]> {
+    if (!this.collection) {
+      await this.initialize();
+    }
+
+    const results = await this.collection.query({
+      queryTexts: [query],
+      nResults: nExamples,
+    });
+
+    if (!results.documents || !results.documents[0]) {
+      return [];
+    }
+
+    return results.documents[0].map((doc: string, index: number) => ({
+      document: doc,
+      similarity: results.distances?.[0]?.[index] ?? 0,
+      metadata: results.metadatas?.[0]?.[index] ?? {},
+    }));
   }
 }
