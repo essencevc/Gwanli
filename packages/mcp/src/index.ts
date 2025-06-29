@@ -27,17 +27,19 @@ let taskStore: TaskExampleStorage;
 
 try {
   const { config, type } = validateEnv();
-  
+
   console.error(`[MCP] Using ${type} storage with Anthropic AI`);
-  
+
   if (isChromaConfig(config)) {
     taskStore = new ChromaTaskExampleStore();
   } else {
     taskStore = new SqliteTaskExampleStore(config.SQLITE_PATH);
   }
-  
 } catch (error) {
-  console.error('[MCP] Environment validation failed:', error instanceof Error ? error.message : String(error));
+  console.error(
+    "[MCP] Environment validation failed:",
+    error instanceof Error ? error.message : String(error)
+  );
   process.exit(1);
 }
 
@@ -67,7 +69,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Type-safe tool lookup
   const toolName = name as ToolName;
   const tool = getToolByName(toolName);
-  
+
   if (!tool) {
     throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
@@ -81,10 +83,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
 
     case "save_task_example":
-      return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
+      return await handleSaveTaskExample(
+        validatedArgs as SaveTaskExampleInput,
+        taskStore
+      );
 
     default:
-      // This should never happen due to exhaustive type checking
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
 });
