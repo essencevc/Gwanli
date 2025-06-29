@@ -32,14 +32,28 @@ const anthropic = new Anthropic({
 
 export async function generate_plan(
   taskDescription: string,
-  context?: string
+  context?: string,
+  examples?: import("./types.js").SearchResult[]
 ): Promise<PlanResponse> {
   const planPrompt = loadPrompt("plan");
   const contextStr = context || "";
+  
+  // Format examples if provided
+  const examplesStr = examples && examples.length > 0 
+    ? examples.map(example => example.document).join("\n\n---\n\n")
+    : "";
 
-  const fullPrompt = planPrompt
+  let fullPrompt = planPrompt
     .replace("{task}", taskDescription)
     .replace("{context}", contextStr);
+
+  // Handle conditional examples section
+  if (examplesStr) {
+    fullPrompt = fullPrompt.replace("{examples:if_not_empty}", "").replace("{/examples:if_not_empty}", "").replace("{examples}", examplesStr);
+  } else {
+    // Remove the entire examples section if no examples
+    fullPrompt = fullPrompt.replace(/\{examples:if_not_empty\}[\s\S]*?\{\/examples:if_not_empty\}/g, "");
+  }
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",

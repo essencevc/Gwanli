@@ -4,8 +4,14 @@ import type { TaskExampleStorage } from "./storage-interface.js";
 
 // Tool implementation functions with dependencies passed in
 
-export async function handleSuggestIssues(args: SuggestIssuesInput) {
-  const plan = await generate_plan(args.taskDescription, args.context);
+export async function handleSuggestIssues(
+  args: SuggestIssuesInput,
+  taskStore: TaskExampleStorage
+) {
+  // Fetch relevant examples based on the task description
+  const examples = await taskStore.searchSimilarExamples(args.taskDescription, 3);
+  
+  const plan = await generate_plan(args.taskDescription, args.context, examples);
 
   if (plan.needsClarification) {
     return {
