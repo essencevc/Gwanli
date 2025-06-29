@@ -8,7 +8,10 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
+import { validateEnv, isChromaConfig } from "@vibeallcoding/core";
 import { ChromaTaskExampleStore } from "./lib/chroma.js";
+import { SqliteTaskExampleStore } from "./lib/sqlite.js";
+import { TaskExampleStorage } from "./lib/storage-interface.js";
 import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
 import {
   Tools,
@@ -18,6 +21,25 @@ import {
   type SuggestIssuesInput,
   type SaveTaskExampleInput,
 } from "./schemas.js";
+
+// Validate environment and initialize appropriate storage
+let taskStore: TaskExampleStorage;
+
+try {
+  const { config, type } = validateEnv();
+  
+  console.error(`[MCP] Using ${type} storage with Anthropic AI`);
+  
+  if (isChromaConfig(config)) {
+    taskStore = new ChromaTaskExampleStore();
+  } else {
+    taskStore = new SqliteTaskExampleStore(config.SQLITE_PATH);
+  }
+  
+} catch (error) {
+  console.error('[MCP] Environment validation failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 const server = new Server(
   {
@@ -30,9 +52,6 @@ const server = new Server(
     },
   }
 );
-
-// Initialize task example store
-const taskStore = new ChromaTaskExampleStore();
 
 // List available tools - convert Zod schemas to MCP format
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -65,8 +84,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleSaveTaskExample(validatedArgs as SaveTaskExampleInput, taskStore);
 
     default:
-      // Exhaustive check - TypeScript will error if we miss a case
-      const _exhaustiveCheck: never = tool.name;
+      // This should never happen due to exhaustive type checking
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
   }
 });
