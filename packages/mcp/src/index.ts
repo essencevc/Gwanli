@@ -8,9 +8,7 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { validateEnv, isChromaConfig } from "./lib/env.js";
-import { ChromaTaskExampleStore } from "./lib/chroma.js";
-import { SqliteTaskExampleStore } from "./lib/sqlite.js";
+import { initializeTaskStore } from "./lib/env.js";
 import { TaskExampleStorage } from "./lib/storage-interface.js";
 import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
 import {
@@ -22,26 +20,8 @@ import {
   type SaveTaskExampleInput,
 } from "./schemas.js";
 
-// Validate environment and initialize appropriate storage
-let taskStore: TaskExampleStorage;
-
-try {
-  const { config, type } = validateEnv();
-
-  console.error(`[MCP] Using ${type} storage with Anthropic AI`);
-
-  if (isChromaConfig(config)) {
-    taskStore = new ChromaTaskExampleStore();
-  } else {
-    taskStore = new SqliteTaskExampleStore(config.SQLITE_PATH);
-  }
-} catch (error) {
-  console.error(
-    "[MCP] Environment validation failed:",
-    error instanceof Error ? error.message : String(error)
-  );
-  process.exit(1);
-}
+// Initialize task storage
+const taskStore: TaskExampleStorage = initializeTaskStore();
 
 const server = new Server(
   {

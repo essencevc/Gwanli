@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ChromaTaskExampleStore } from "./chroma.js";
+import { SqliteTaskExampleStore } from "./sqlite.js";
+import { TaskExampleStorage } from "./storage-interface.js";
 
 // Environment validation schemas
 const ChromaConfigSchema = z.object({
@@ -51,6 +54,27 @@ export function validateEnv() {
         `SQLite validation error: ${sqliteError instanceof Error ? sqliteError.message : String(sqliteError)}`
       );
     }
+  }
+}
+
+// Initialize task storage based on environment configuration
+export function initializeTaskStore(): TaskExampleStorage {
+  try {
+    const { config, type } = validateEnv();
+
+    console.error(`[MCP] Using ${type} storage with Anthropic AI`);
+
+    if (isChromaConfig(config)) {
+      return new ChromaTaskExampleStore();
+    } else {
+      return new SqliteTaskExampleStore(config.SQLITE_PATH);
+    }
+  } catch (error) {
+    console.error(
+      "[MCP] Environment validation failed:",
+      error instanceof Error ? error.message : String(error)
+    );
+    process.exit(1);
   }
 }
 
