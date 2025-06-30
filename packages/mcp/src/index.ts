@@ -60,7 +60,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Route to appropriate handler with exhaustive matching
   switch (tool.name) {
     case "suggest_issues":
-      return await handleSuggestIssues(validatedArgs as SuggestIssuesInput);
+      return await handleSuggestIssues(validatedArgs as SuggestIssuesInput, taskStore);
 
     case "save_task_example":
       return await handleSaveTaskExample(
