@@ -62,6 +62,45 @@ apps/
 - Use Zod schemas for structured data validation
 - Keep packages focused: mcp for protocol server, gh-action for GitHub integration, core for shared utilities
 
+## Function Structure & Organization Patterns
+
+**Tool Definition Pattern**:
+- Define tools as const objects with `name`, `description`, and `inputSchema` (Zod schema)
+- Use `as const` assertions for type safety
+- Example:
+  ```typescript
+  export const MyTool = {
+    name: "my_tool" as const,
+    description: "Tool description",
+    inputSchema: z.object({
+      param: z.string().min(1, "Param is required"),
+    }),
+  } as const;
+  ```
+
+**Validation & Type Safety**:
+- Always validate inputs using `tool.inputSchema.parse(args)` before processing
+- Use Zod's `.min()`, `.optional()`, `.default()` for comprehensive validation
+- Generate TypeScript types with `z.infer<typeof Schema>`
+- Convert Zod schemas to JSON Schema using `zodToJsonSchema()` for MCP compatibility
+
+**Function Organization**:
+- Separate tool definitions (`schemas.ts`) from implementations (`lib/mcp.ts`)
+- Pass dependencies as function parameters (dependency injection pattern)
+- Use type-safe tool lookup with union types and exhaustive switch statements
+- Handle async operations properly with `async/await`
+
+**Environment & Configuration**:
+- Use environment validation with Zod schemas for config validation
+- Initialize external dependencies (storage, APIs) through environment setup
+- Keep environment setup separate from core logic
+
+**Error Handling**:
+- Use MCP-specific error types (`McpError`, `ErrorCode`)
+- Validate all inputs before processing
+- Provide meaningful error messages
+- Handle both validation errors and runtime errors appropriately
+
 ## Knowledge Management
 
 **After successfully implementing features, always ask the user:**

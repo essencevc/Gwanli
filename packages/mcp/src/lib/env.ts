@@ -50,7 +50,7 @@ export function validateEnv() {
       // Both failed, provide helpful error message
       throw new Error(
         "Environment validation failed. Please provide either:\n" +
-          "1. Chroma config: CHROMA_URL, CHROMA_COLLECTION, ANTHROPIC_API_KEY, OPENAI_API_KEY\n" +
+          "1. Chroma config: CHROMA_URL, CHROMA_COLLECTION, ANTHROPIC_API_KEY\n" +
           "2. SQLite config: SQLITE_PATH, ANTHROPIC_API_KEY\n\n" +
           `Chroma validation error: ${
             chromaError instanceof Error
