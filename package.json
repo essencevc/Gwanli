@@ -1,6 +1,6 @@
 {
   "name": "vibe-all-coding",
-  "version": "0.1.10",
+  "version": "0.1.14",
   "workspaces": [
     "packages/*",
     "apps/*"
