@@ -5,7 +5,7 @@ import { TaskExampleStorage } from "./storage-interface.js";
 
 // Environment validation schemas
 const ChromaConfigSchema = z.object({
-  CHROMA_API_KEY: z.string().url(),
+  CHROMA_API_KEY: z.string(),
   CHROMA_TENANT: z.string().min(1),
   CHROMA_DATABASE: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
