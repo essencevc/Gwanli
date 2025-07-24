@@ -7,7 +7,7 @@
     "vibe-all-coding": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc && cp -r src/prompts dist/prompts",
+    "build": "tsc && cp -r src/prompts dist/prompts && cp -r src/constants dist/constants",
     "preview": "npx @modelcontextprotocol/inspector dist/index.js",
     "clean": "rm -rf dist",
     "test": "vitest"

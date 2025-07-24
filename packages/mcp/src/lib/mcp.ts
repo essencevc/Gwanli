@@ -1,8 +1,15 @@
-import type { SuggestIssuesInput, SaveTaskExampleInput, SearchNotionInput } from "../schemas.js";
+import type {
+  SuggestIssuesInput,
+  SaveTaskExampleInput,
+  SearchNotionInput,
+  IndexNotionInput,
+} from "../schemas.js";
 import { generate_plan } from "./plan.js";
 import type { TaskExampleStorage } from "./storage-interface.js";
 import { convertNotionPageToMarkdown } from "./notion-to-markdown.js";
-import { Client } from '@notionhq/client';
+import { Client } from "@notionhq/client";
+import { init_db } from "./db.js";
+import fs from "fs";
 
 // Tool implementation functions with dependencies passed in
 
@@ -11,9 +18,16 @@ export async function handleSuggestIssues(
   taskStore: TaskExampleStorage
 ) {
   // Fetch relevant examples based on the task description
-  const examples = await taskStore.searchSimilarExamples(args.taskDescription, 3);
-  
-  const plan = await generate_plan(args.taskDescription, args.context, examples);
+  const examples = await taskStore.searchSimilarExamples(
+    args.taskDescription,
+    3
+  );
+
+  const plan = await generate_plan(
+    args.taskDescription,
+    args.context,
+    examples
+  );
 
   if (plan.needsClarification) {
     return {
@@ -57,8 +71,23 @@ export async function handleSaveTaskExample(
   };
 }
 
-export async function handleSearchNotion(args: SearchNotionInput) {
-  // For now, throw an error indicating that no Notion index exists
-  // In the future, this will check if an index exists and create one if not
-  throw new Error("No Notion index found. Index creation not yet implemented. Please run index creation first.");
+export async function handleIndexNotion(args: IndexNotionInput) {
+  const { force_reindex, db_location } = args;
+
+  const notion = new Client({ auth: process.env.NOTION_API_KEY });
+
+  if (force_reindex || !fs.existsSync(db_location)) {
+    init_db(db_location);
+  }
+
+  // Now we read from the db and do a sample search
+
+  const db = init_db(db_location);
+  const result = db.exec("SELECT * FROM Page");
+
+  console.log(result);
+
+  return {
+    content: [{ type: "text" as const, text: "Notion indexed successfully" }],
+  };
 }

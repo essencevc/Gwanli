@@ -1,14 +1,16 @@
-import { Client } from '@notionhq/client';
-import { NotionToMarkdown } from 'notion-to-md';
-import { z } from 'zod';
+import { Client } from "@notionhq/client";
+import { NotionToMarkdown } from "notion-to-md";
+import { z } from "zod";
 
 // Input validation schema
 const notionPageToMarkdownSchema = z.object({
-  pageId: z.string().min(1, 'Page ID is required'),
-  notionToken: z.string().min(1, 'Notion token is required'),
+  pageId: z.string().min(1, "Page ID is required"),
+  notionToken: z.string().min(1, "Notion token is required"),
 });
 
-export type NotionPageToMarkdownInput = z.infer<typeof notionPageToMarkdownSchema>;
+export type NotionPageToMarkdownInput = z.infer<
+  typeof notionPageToMarkdownSchema
+>;
 
 /**
  * Converts a Notion page to markdown format
@@ -27,18 +29,22 @@ export async function convertNotionPageToMarkdown(
     auth: notionToken,
   });
 
-  // Initialize NotionToMarkdown converter
+  //@ts-expect-error - NotionToMarkdown is not typed
   const n2m = new NotionToMarkdown({ notionClient: notion });
 
   try {
     // Get the page blocks
     const mdblocks = await n2m.pageToMarkdown(pageId);
-    
+
     // Convert blocks to markdown string
     const mdString = n2m.toMarkdownString(mdblocks);
-    
+
     return mdString.parent;
   } catch (error) {
-    throw new Error(`Failed to convert Notion page to markdown: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to convert Notion page to markdown: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 }

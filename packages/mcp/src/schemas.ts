@@ -13,7 +13,8 @@ export const SuggestIssuesTool = {
 
 export const SaveTaskExampleTool = {
   name: "save_task_example" as const,
-  description: "Save a task example with context and issues for future reference",
+  description:
+    "Save a task example with context and issues for future reference",
   inputSchema: z.object({
     task: z.string().min(1, "Task is required"),
     context: z.string().min(1, "Context is required"),
@@ -23,18 +24,35 @@ export const SaveTaskExampleTool = {
 
 export const SearchNotionTool = {
   name: "search_notion" as const,
-  description: "Search through indexed Notion pages. Creates index on first use if not exists.",
+  description:
+    "Search through indexed Notion pages. Creates index on first use if not exists.",
   inputSchema: z.object({
     query: z.string().min(1, "Search query is required"),
     notionToken: z.string().min(1, "Notion token is required"),
   }),
 } as const;
 
+export const IndexNotionTool = {
+  name: "index_notion" as const,
+  description: "Index a Notion workspace using the NOTION_API_KEY",
+  inputSchema: z.object({
+    force_reindex: z.boolean().optional().default(true),
+    db_location: z.string().optional().default("./notion.db"),
+  }),
+} as const;
+
 // Create union of all tools
-export const Tools = [SuggestIssuesTool, SaveTaskExampleTool, SearchNotionTool] as const;
+export const Tools = [
+  SuggestIssuesTool,
+  SaveTaskExampleTool,
+  SearchNotionTool,
+  IndexNotionTool,
+] as const;
 
 // Helper to convert tool to MCP format
-export function toolToMcp(tool: typeof SuggestIssuesTool | typeof SaveTaskExampleTool | typeof SearchNotionTool) {
+export function toolToMcp(
+  tool: (typeof Tools)[number]
+) {
   return {
     name: tool.name,
     description: tool.description,
@@ -43,14 +61,20 @@ export function toolToMcp(tool: typeof SuggestIssuesTool | typeof SaveTaskExampl
 }
 
 // Type-safe tool name union
-export type ToolName = typeof Tools[number]["name"];
+export type ToolName = (typeof Tools)[number]["name"];
 
 // Get tool by name with type safety
 export function getToolByName<T extends ToolName>(name: T) {
-  return Tools.find(tool => tool.name === name) as Extract<typeof Tools[number], { name: T }>;
+  return Tools.find((tool) => tool.name === name) as Extract<
+    (typeof Tools)[number],
+    { name: T }
+  >;
 }
 
 // Inferred input types
 export type SuggestIssuesInput = z.infer<typeof SuggestIssuesTool.inputSchema>;
-export type SaveTaskExampleInput = z.infer<typeof SaveTaskExampleTool.inputSchema>;
+export type SaveTaskExampleInput = z.infer<
+  typeof SaveTaskExampleTool.inputSchema
+>;
 export type SearchNotionInput = z.infer<typeof SearchNotionTool.inputSchema>;
+export type IndexNotionInput = z.infer<typeof IndexNotionTool.inputSchema>;

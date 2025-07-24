@@ -10,7 +10,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { initializeTaskStore } from "./lib/env.js";
 import { TaskExampleStorage } from "./lib/storage-interface.js";
-import { handleSuggestIssues, handleSaveTaskExample } from "./lib/mcp.js";
+import {
+  handleSuggestIssues,
+  handleSaveTaskExample,
+  handleIndexNotion,
+} from "./lib/mcp.js";
 import {
   Tools,
   toolToMcp,
@@ -18,6 +22,7 @@ import {
   type ToolName,
   type SuggestIssuesInput,
   type SaveTaskExampleInput,
+  IndexNotionInput,
 } from "./schemas.js";
 
 // Initialize task storage
@@ -60,13 +65,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Route to appropriate handler with exhaustive matching
   switch (tool.name) {
     case "suggest_issues":
-      return await handleSuggestIssues(validatedArgs as SuggestIssuesInput, taskStore);
+      return await handleSuggestIssues(
+        validatedArgs as SuggestIssuesInput,
+        taskStore
+      );
 
     case "save_task_example":
       return await handleSaveTaskExample(
         validatedArgs as SaveTaskExampleInput,
         taskStore
       );
+    case "index_notion":
+      return await handleIndexNotion(validatedArgs as IndexNotionInput);
 
     default:
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
