@@ -35,7 +35,9 @@ jobs:
         run: bun install
 
       - name: Build all packages
-        run: bun run build
+        run: |
+          echo "🔨 Building packages in dependency order (core → mcp → cli)..."
+          bun run build
 
       - name: Setup Node.js and NPM
         uses: actions/setup-node@v4

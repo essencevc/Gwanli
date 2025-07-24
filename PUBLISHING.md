@@ -22,7 +22,7 @@ The packages must be published in this specific order due to dependencies:
 
 1. Ensure you have NPM publish access to the packages
 2. Set up NPM authentication: `npm login`
-3. Build all packages: `bun run build`
+3. Build all packages: `bun run build` (builds in dependency order: core → mcp → cli)
 
 ### Step-by-Step Publishing
 
