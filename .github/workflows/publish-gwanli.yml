@@ -1,0 +1,159 @@
+name: Publish Gwanli Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish_core:
+        description: "Publish gwanli-core"
+        required: false
+        default: true
+        type: boolean
+      publish_mcp:
+        description: "Publish gwanli-mcp"
+        required: false
+        default: true
+        type: boolean
+      publish_main:
+        description: "Publish gwanli (main package)"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Setup Node.js and NPM
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          registry-url: "https://registry.npmjs.org"
+
+      # Verification steps
+      - name: Check if NPM_TOKEN secret exists
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "❌ NPM_TOKEN secret is not set"
+            exit 1
+          else
+            echo "✅ NPM_TOKEN secret exists"
+          fi
+
+      - name: Verify NPM authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify package.json files exist
+        run: |
+          for package in gwanli-core gwanli-mcp gwanli; do
+            if [ ! -f "packages/$package/package.json" ]; then
+              echo "❌ package.json not found in packages/$package/"
+              exit 1
+            else
+              echo "✅ package.json found for $package"
+              cat "packages/$package/package.json" | grep -E '"name"|"version"'
+            fi
+          done
+
+      # Publishing order: core first, mcp second, main last
+      - name: Publish gwanli-core
+        if: ${{ github.event_name == 'release' || inputs.publish_core == 'true' }}
+        run: |
+          cd packages/gwanli-core
+          echo "📦 Publishing gwanli-core..."
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Wait for gwanli-core to be available
+        if: ${{ github.event_name == 'release' || inputs.publish_core == 'true' }}
+        run: |
+          echo "⏳ Waiting for gwanli-core to be available on NPM..."
+          sleep 30
+          for i in {1..12}; do
+            if npm view gwanli-core version; then
+              echo "✅ gwanli-core is available"
+              break
+            fi
+            echo "⏳ Attempt $i/12: gwanli-core not yet available, waiting 10s..."
+            sleep 10
+          done
+
+      - name: Publish gwanli-mcp
+        if: ${{ github.event_name == 'release' || inputs.publish_mcp == 'true' }}
+        run: |
+          cd packages/gwanli-mcp
+          echo "📦 Publishing gwanli-mcp..."
+          # Replace workspace dependencies with published versions
+          npm pkg set dependencies.gwanli-core="$(cd ../gwanli-core && npm pkg get version | tr -d '\"')"
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Wait for gwanli-mcp to be available
+        if: ${{ github.event_name == 'release' || inputs.publish_mcp == 'true' }}
+        run: |
+          echo "⏳ Waiting for gwanli-mcp to be available on NPM..."
+          sleep 30
+          for i in {1..12}; do
+            if npm view gwanli-mcp version; then
+              echo "✅ gwanli-mcp is available"
+              break
+            fi
+            echo "⏳ Attempt $i/12: gwanli-mcp not yet available, waiting 10s..."
+            sleep 10
+          done
+
+      - name: Publish gwanli (main package)
+        if: ${{ github.event_name == 'release' || inputs.publish_main == 'true' }}
+        run: |
+          cd packages/gwanli
+          echo "📦 Publishing gwanli (main package)..."
+          # Replace workspace dependencies with published versions
+          core_version=$(cd ../gwanli-core && npm pkg get version | tr -d '\"')
+          mcp_version=$(cd ../gwanli-mcp && npm pkg get version | tr -d '\"')
+          npm pkg set dependencies.gwanli-core="$core_version"
+          npm pkg set dependencies.gwanli-mcp="$mcp_version"
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish summary
+        run: |
+          echo "## 🎉 Publishing Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following packages have been published to NPM:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name == 'release' || inputs.publish_core == 'true' }}" = "true" ]; then
+            echo "- ✅ **gwanli-core** - Core library for developers" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event_name == 'release' || inputs.publish_mcp == 'true' }}" = "true" ]; then
+            echo "- ✅ **gwanli-mcp** - MCP server for Model Context Protocol" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event_name == 'release' || inputs.publish_main == 'true' }}" = "true" ]; then
+            echo "- ✅ **gwanli** - Main package with CLI and MCP server" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Install main package (includes CLI and MCP server)" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g gwanli" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Or install core library for development" >> $GITHUB_STEP_SUMMARY
+          echo "npm install gwanli-core" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,30 @@
+{
+  "name": "gwanli-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Gwanli Notion management with AI capabilities",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gwanli-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "preview": "npx @modelcontextprotocol/inspector dist/index.js"
+  },
+  "author": "Ivan Leo & Timothy Chen",
+  "license": "MIT",
+  "dependencies": {
+    "gwanli-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@anthropic-ai/sdk": "^0.29.0",
+    "zod": "^3.25.64"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

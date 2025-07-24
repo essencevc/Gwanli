@@ -1,29 +1,21 @@
 {
-  "name": "vibe-all-coding",
-  "version": "0.1.14",
+  "name": "gwanli-monorepo",
+  "private": true,
+  "type": "module",
   "workspaces": [
-    "packages/*",
-    "apps/*"
+    "packages/*"
   ],
   "scripts": {
-    "build": "bun run build:action && bun run build:mcp",
-    "dev": "bun --watch dev",
-    "lint": "bun run lint --filter=*",
-    "test": "bun test",
-    "clean": "bun run clean --filter=*",
-    "build:action": "cd packages/gh-action && bun run build",
-    "build:mcp": "cd packages/mcp && bun run build",
-    "dev:web": "cd apps/web && bun run dev",
-    "publish:mcp": "cd packages/mcp && bun run build && bun publish --access=public"
+    "build": "bun run build:core && bun run build:cli && bun run build:mcp",
+    "build:core": "cd packages/gwanli-core && bun run build",
+    "build:cli": "cd packages/gwanli && bun run build", 
+    "build:mcp": "cd packages/gwanli-mcp && bun run build",
+    "dev": "bun run build --watch",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules",
+    "test": "bun test"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
-  },
-  "dependencies": {
-    "@notionhq/client": "^3.1.3",
-    "chromadb": "^3.0.3",
-    "zod": "^3.25.64",
-    "zod-to-json-schema": "^3.24.6"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }
