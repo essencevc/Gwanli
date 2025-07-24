@@ -19,11 +19,11 @@ packages/
 │  │   └─ db/               (better-sqlite abstractions)  
 │  ├─ package.json          (type=module, exports, no bin)  
 │  └─ tsconfig.json  
-├─ gwanli-cli/              → End-user CLI built on the library  
+├─ gwanli-cli/              → Main package (renamed to "gwanli" for npm)
 │  ├─ src/cli.ts            (commander / yargs)  
-│  ├─ package.json          (bin: { "gwanli": "dist/cli.js" })  
+│  ├─ package.json          (name: "gwanli", bin: { "gwanli": "dist/cli.js", "gwanli-mcp": "..." })  
 │  └─ tsconfig.json  
-└─ gwanli-mcp/              → MCP server (refactored from existing)  
+└─ gwanli-mcp/              → MCP server (included as dependency)
    ├─ src/index.ts          (MCP protocol entry)  
    ├─ src/lib/mcp.ts        (delegates to gwanli-core)  
    └─ package.json          (depends on gwanli-core)
@@ -89,19 +89,21 @@ const results = await search({
 const markdown = await pageToMarkdown('page-id', process.env.NOTION_TOKEN!)
 ```
 
-### 2. CLI Usage (gwanli-cli)
+### 2. CLI Usage (gwanli)
 ```bash
-# Install globally
-npm install -g gwanli-cli
+# Install globally or locally
+npm install -g gwanli
+# OR
+bun add gwanli
 
 # Index workspace
-gwanli index --token $NOTION_TOKEN --db ./notion.db --force
+npx gwanli index --token $NOTION_TOKEN --db ./notion.db --force
 
 # Search content
-gwanli search "project management" --db ./notion.db
+npx gwanli search "project management" --db ./notion.db
 
 # Export page to markdown
-gwanli export page-id --token $NOTION_TOKEN --output page.md
+npx gwanli export page-id --token $NOTION_TOKEN --output page.md
 ```
 
 **CLI Implementation Detail:**
@@ -133,7 +135,12 @@ program
 
 **Installation:**
 ```bash
-npm install gwanli-mcp
+# Install the main package (includes MCP server)
+bun add gwanli
+
+# Run MCP server
+npx gwanli-mcp
+
 # OR use with MCP inspector
 npx @modelcontextprotocol/inspector gwanli-mcp
 ```
@@ -143,7 +150,8 @@ npx @modelcontextprotocol/inspector gwanli-mcp
 {
   "mcpServers": {
     "gwanli": {
-      "command": "gwanli-mcp",
+      "command": "npx",
+      "args": ["gwanli-mcp"],
       "env": {
         "NOTION_TOKEN": "secret_xyz",
         "ANTHROPIC_API_KEY": "sk-ant-xyz"  // ← Enables agentic features
@@ -245,8 +253,9 @@ gwanli-core (no deps on other gwanli packages)
 ├── better-sqlite3
 └── zod
 
-gwanli-cli
+gwanli (main package)
 ├── gwanli-core        ← main dependency
+├── gwanli-mcp         ← bundled MCP server
 ├── commander
 └── chalk (optional)
 
@@ -258,23 +267,20 @@ gwanli-mcp
 
 ### Publishing Strategy
 
-**Option 1: Independent Versioning** (Recommended)
-- `gwanli-core@1.2.3` - Core library, independent releases
-- `gwanli-cli@2.1.0` - CLI tool, depends on `gwanli-core@^1.0.0`  
-- `gwanli-mcp@1.5.2` - MCP server, depends on `gwanli-core@^1.0.0`
-
-**Option 2: Lockstep Versioning**
-- All packages share same version: `@1.2.3`
-- Released together, simpler but less flexible
+**Simplified Single-Package Approach** (Implemented)
+- `gwanli@1.2.3` - Main package with CLI and MCP server bundled
+- `gwanli-core@1.2.3` - Core library for developers (published separately)
+- `gwanli-mcp@1.2.3` - MCP server (dependency of main package)
 
 **Publishing Order:**
 1. `npm publish gwanli-core` (foundation first)
-2. `npm publish gwanli-cli gwanli-mcp` (consumers second)
+2. `npm publish gwanli-mcp` (MCP server second)
+3. `npm publish gwanli` (main package last, includes both CLI and MCP)
 
 **Package Names:**
-- `gwanli-core` - Core library
-- `gwanli-cli` - CLI tool (global: `npm i -g gwanli-cli`)
-- `gwanli-mcp` - MCP server (optional for most users)
+- `gwanli-core` - Core library for developers
+- `gwanli` - Main package with CLI + MCP server (install: `bun add gwanli`)
+- `gwanli-mcp` - MCP server (included as dependency)
 
 ## Key Architectural Insights
 
@@ -284,7 +290,7 @@ gwanli-mcp
 import { Client } from '@notionhq/client'
 import { NotionToMarkdown } from 'notion-to-md'
 
-// gwanli-cli: Simple wrapper
+// gwanli: Simple wrapper (main package)
 import { indexWorkspace, search } from 'gwanli-core'  // ← Main dependency
 import { Command } from 'commander'
 
@@ -296,11 +302,11 @@ import { Anthropic } from '@anthropic-ai/sdk'          // ← AI capabilities
 
 ### Distribution Strategy
 - **gwanli-core**: Developers import this for embedding in apps
-- **gwanli-cli**: End users install globally for command-line usage
-- **gwanli-mcp**: AI agents use this for intelligent Notion management
+- **gwanli**: End users install this for both CLI and MCP server access
+- **gwanli-mcp**: Included as dependency, AI agents use via `npx gwanli-mcp`
 
 ### Agentic vs Non-Agentic Features
-**Non-Agentic** (gwanli-core + gwanli-cli):
+**Non-Agentic** (gwanli-core + gwanli):
 - Index Notion workspaces  
 - Search indexed content
 - Convert pages to markdown

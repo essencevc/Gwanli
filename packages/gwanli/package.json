@@ -1,0 +1,29 @@
+{
+  "name": "gwanli",
+  "version": "0.1.0",
+  "description": "Notion management with AI capabilities - CLI and MCP server",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+  "gwanli": "dist/cli.js",
+  "gwanli-mcp": "dist/mcp.js"
+  },
+  "files": [
+  "dist"
+  ],
+  "scripts": {
+  "build": "tsc && cp ../gwanli-mcp/dist/index.js dist/mcp.js",
+  "clean": "rm -rf dist"
+  },
+  "author": "Ivan Leo & Timothy Chen",
+  "license": "MIT",
+  "dependencies": {
+    "gwanli-core": "workspace:*",
+    "gwanli-mcp": "workspace:*",
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
