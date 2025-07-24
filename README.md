@@ -2,6 +2,8 @@
 
 A powerful MCP (Model Context Protocol) server that provides AI-powered coding assistance tools with Notion integration.
 
+Includes **Gwanli (관리)** - A Korean-inspired CLI tool for Notion workspace management, where "관리" means "management" in Korean.
+
 ## Features
 
 - **Suggest Issues**: Break down tasks and features into actionable development issues using AI
@@ -160,6 +162,76 @@ This script will:
 - Test database access and permissions
 - Fetch and display all pages from your database
 - Show page content and metadata
+
+## Local CLI Usage - Gwanli (관리)
+
+This project includes **Gwanli (관리)** - a CLI for local Notion management. "관리" means "management" in Korean.
+
+### Quick Start
+
+```bash
+# Install dependencies
+bun install
+
+# Run CLI commands directly (builds automatically)
+bun run cli --help
+bun run cli hello
+bun run cli index --token "your-notion-token"
+```
+
+### All CLI Commands
+
+**Help Command**:
+```bash
+bun run cli --help
+```
+
+**Hello Command** (test the CLI):
+```bash
+bun run cli hello
+```
+
+**Index Command** (list Notion pages):
+```bash
+# Using environment variable for token
+export NOTION_TOKEN="your-notion-integration-token"
+bun run cli index
+
+# Or pass token directly
+bun run cli index --token "your-notion-integration-token"
+
+# Index a specific database
+bun run cli index --database "your-database-id"
+```
+
+### Alternative: Manual Build and Run
+
+If you prefer to build manually:
+
+```bash
+# Build the project
+bun run build
+
+# Run from the gwanli package directory
+cd packages/gwanli
+node dist/cli.js --help
+```
+
+### Setting Up Your Notion Token
+
+You can provide your Notion integration token in two ways:
+
+1. **Environment variable** (recommended):
+   ```bash
+   export NOTION_TOKEN="your-notion-integration-token"
+   ```
+
+2. **Command line option**:
+   ```bash
+   bun run cli index --token "your-notion-integration-token"
+   ```
+
+The CLI will display all accessible pages with their titles, IDs, URLs, and timestamps.
 
 ## Development
 
