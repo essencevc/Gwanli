@@ -35,45 +35,15 @@ Or use without installing:
 npx gwanli --help
 ```
 
-## Notion Integration Setup
+## Setup
 
-### 1. Create Notion Integration
+### 1. Get Your Notion API Key
 
-1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
-2. Click "New integration"
-3. Give it a name (e.g., "Gwanli")
-4. Select your workspace
-5. Copy the integration token (starts with `secret_`)
+Visit [Our deployed worker](https://worker.ivanleomk9297.workers.dev) to get your NOTION_API_KEY. If you'd like to know how the worker works, just check out [our source code here](./worker/index.ts)
 
-### 2. Share Pages with Integration
+### 2. Start Using the MCP Server
 
-For each page you want Gwanli to access:
-
-1. Open the page in Notion
-2. Click "Share" in the top right
-3. Click "Invite" and search for your integration name
-4. Select your integration and click "Invite"
-
-### 3. Configure Gwanli
-
-Set your integration token:
-
-```bash
-# Set token as environment variable
-export NOTION_TOKEN=secret_your_integration_token_here
-
-# Or create a .env file
-echo "NOTION_TOKEN=secret_your_integration_token_here" > .env
-```
-
-### 4. Index Your Workspace
-
-```bash
-# Index all accessible pages
-npx gwanli index
-
-# This creates a local SQLite cache of your workspace
-```
+You can now use the MCP server directly with your API key.
 
 ## Quick Start
 
