@@ -1,260 +1,394 @@
-# vibe-all-coding
+# Gwanli
 
-A powerful MCP (Model Context Protocol) server that provides AI-powered coding assistance tools with Notion integration.
+A powerful Notion workspace management tool that represents your Notion pages as Markdown with filesystem-like operations.
 
-Includes **Gwanli (관리)** - A Korean-inspired CLI tool for Notion workspace management, where "관리" means "management" in Korean.
+Gwanli provides a fast, cached interface to your Notion workspace through both an MCP server and CLI tool. It converts Notion's complex block structure into clean Markdown while maintaining full read/write capabilities.
 
-## Features
+## Why Gwanli?
 
-- **Suggest Issues**: Break down tasks and features into actionable development issues using AI
-- **Task Planning**: Generate structured, manageable work items from complex requirements
-- **Notion Integration**: Fetch and analyze content from Notion databases and pages
+**Fast Local Access**: All queries run against a local SQLite cache, eliminating Notion's rate limits and providing instant results.
+
+**Filesystem-Like Navigation**: Use familiar paths like `/fitness/weight-log` instead of cryptic page IDs.
+
+**Markdown Interface**: Read and write Notion content as clean Markdown, perfect for automation and AI integration.
+
+**Powerful Filtering**: Query your databases with simple conditions like `Weight > 75` or `Mood = Great` - all processed locally.
+
+**AI-Ready**: Built-in MCP server enables AI assistants to manage your Notion workspace naturally.
 
 ## Installation
 
-Run vibe-all-coding directly using npx:
+### Prerequisites
+
+- Node.js 18 or higher
+- A Notion workspace with integration access
+
+### Install Gwanli
 
 ```bash
-npx -y vibe-all-coding@latest
+npm install -g gwanli
 ```
 
-## Claude Desktop Setup
+Or use without installing:
 
-To use vibe-all-coding with Claude Desktop, add this configuration to your Claude Desktop settings:
+```bash
+npx gwanli --help
+```
 
-1. Open Claude Desktop settings
-2. Add the following MCP server configuration:
+## Notion Integration Setup
+
+### 1. Create Notion Integration
+
+1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
+2. Click "New integration"
+3. Give it a name (e.g., "Gwanli")
+4. Select your workspace
+5. Copy the integration token (starts with `secret_`)
+
+### 2. Share Pages with Integration
+
+For each page you want Gwanli to access:
+
+1. Open the page in Notion
+2. Click "Share" in the top right
+3. Click "Invite" and search for your integration name
+4. Select your integration and click "Invite"
+
+### 3. Configure Gwanli
+
+Set your integration token:
+
+```bash
+# Set token as environment variable
+export NOTION_TOKEN=secret_your_integration_token_here
+
+# Or create a .env file
+echo "NOTION_TOKEN=secret_your_integration_token_here" > .env
+```
+
+### 4. Index Your Workspace
+
+```bash
+# Index all accessible pages
+npx gwanli index
+
+# This creates a local SQLite cache of your workspace
+```
+
+## Quick Start
+
+### Basic Usage
+
+```bash
+# List all pages
+npx gwanli list "/**"
+
+# List pages in a specific section
+npx gwanli list "/projects/**"
+
+# Get page content as Markdown
+npx gwanli get "/projects/roadmap"
+
+# Search across all content
+npx gwanli search "meeting notes"
+```
+
+### Database Operations
+
+```bash
+# View database entries
+npx gwanli db get "/projects/tasks"
+
+# Filter by column values (all local - instant results)
+npx gwanli db get "/projects/tasks" --where "Status = In Progress"
+npx gwanli db get "/projects/tasks" --where "Priority >= 3"
+
+# Show only specific columns
+npx gwanli db get "/projects/tasks" --columns "Title,Status,Due Date"
+
+# Combine filtering and column selection
+npx gwanli db get "/projects/tasks" \
+  --where "Status = In Progress" \
+  --where "Priority >= 3" \
+  --columns "Title,Due Date"
+
+# Add new database entry
+npx gwanli db add "/projects/tasks" --data '{
+  "Title": "Review documentation",
+  "Status": "Todo",
+  "Priority": 2,
+  "Due Date": "2025-01-10"
+}'
+```
+
+### Content Management
+
+```bash
+# Create new page
+npx gwanli create "/projects/new-feature" --content "# New Feature\n\nDescription here..."
+
+# Update existing page
+npx gwanli update "/projects/roadmap" --content "# Updated Roadmap\n\nNew content..."
+
+# Append to page
+npx gwanli append "/projects/meeting-notes" --content "## Action Items\n- Review code"
+
+# Replace specific section
+npx gwanli replace "/projects/status" --section "Current Sprint" --content "Sprint 23 - Week 2"
+```
+
+## Filtering and Querying
+
+Gwanli processes all filters locally against your cached data, providing instant results without API rate limits.
+
+### Supported Filter Operators
+
+```bash
+# Numeric comparisons
+--where "Priority > 2"
+--where "Score >= 85"
+--where "Count <= 10"
+--where "Rating = 5"
+
+# Text matching
+--where "Status = Done"
+--where "Title contains 'meeting'"
+--where "Notes startswith 'Important'"
+
+# Date comparisons
+--where "Due Date > 2025-01-01"
+--where "Created >= 2025-01-01"
+
+# Boolean values
+--where "Completed = true"
+--where "Archived = false"
+
+# Range queries
+--where "Priority between 2 and 4"
+
+# Multiple conditions (AND logic)
+--where "Status = In Progress" --where "Priority >= 3"
+```
+
+### Output Formats
+
+```bash
+# Markdown table (default)
+npx gwanli db get "/projects/tasks" --where "Status = Done"
+
+# JSON for scripting
+npx gwanli db get "/projects/tasks" --format json
+
+# XML with embedded content
+npx gwanli db get "/projects/tasks" --format xml
+```
+
+## MCP Server for AI Integration
+
+### Start MCP Server
+
+```bash
+npx gwanli-mcp
+```
+
+### Claude Desktop Integration
+
+Add to your Claude Desktop MCP configuration:
 
 ```json
 {
   "mcpServers": {
-    "vibe-all-coding": {
+    "gwanli": {
       "command": "npx",
-      "args": ["-y", "vibe-all-coding@latest"],
+      "args": ["gwanli-mcp"],
       "env": {
-        "ANTHROPIC_API_KEY": "your-anthropic-api-key-here",
-        "NOTION_API_KEY": "your-notion-integration-token-here",
-        "CHROMA_API_KEY": "your-chroma-api-key-here",
-        "CHROMA_TENANT": "your-chroma-tenant-id",
-        "CHROMA_DATABASE": "your-chroma-database-name"
+        "NOTION_TOKEN": "secret_your_integration_token_here"
       }
     }
   }
 }
 ```
 
-3. Replace the API keys with your actual tokens (see below for setup instructions)
-4. Restart Claude Desktop
-
-## Setting Up Notion Integration
-
-To enable Notion features, you'll need to create a Notion integration:
-
-### 1. Create a Notion Integration
-
-1. Go to [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations)
-2. Click **"+ New integration"**
-3. Fill out the integration details:
-   - **Name**: Choose a name (e.g., "vibe-all-coding")
-   - **Associated workspace**: Select your workspace
-   - **Type**: Internal integration
-4. Click **"Submit"**
-
-### 2. Get Your Integration Token
-
-1. After creation, you'll see the **"Internal Integration Token"**
-2. Click **"Show"** and copy the token
-3. This is your `NOTION_API_KEY` value
-
-### 3. Share Your Content with the Integration
-
-**Important**: Your integration needs explicit permission to access Notion content.
-
-**For databases:**
-1. Open your Notion database
-2. Click the **"..."** menu in the top-right corner
-3. Select **"+ Add connections"**
-4. Search for and select your integration
-5. Confirm access
-
-**For pages:**
-1. Open your Notion page
-2. Click the **"..."** menu in the top-right corner  
-3. Select **"+ Add connections"**
-4. Search for and select your integration
-5. Confirm access (this gives access to the page and all child pages)
-
-### 4. Get Database/Page IDs
-
-**Database ID**: In your database URL, copy the 32-character string before any "?" 
-- Example: `https://notion.so/myworkspace/a8aec43384f447ed84390e8e42c2e089?v=...`
-- Database ID: `a8aec43384f447ed84390e8e42c2e089`
-
-**Page ID**: In your page URL, copy the 32-character string at the end
-- Example: `https://notion.so/myworkspace/My-Page-a8aec43384f447ed84390e8e42c2e089`
-- Page ID: `a8aec43384f447ed84390e8e42c2e089`
-
-## Setting Up ChromaDB Cloud Integration
-
-The vibe-all-coding server uses ChromaDB for vector storage to save and retrieve task examples with embeddings. You'll need a ChromaDB Cloud account.
-
-### 1. Create a ChromaDB Cloud Account
-
-1. Visit [https://docs.trychroma.com/cloud/getting-started](https://docs.trychroma.com/cloud/getting-started)
-2. Sign up for a ChromaDB Cloud account
-3. Create a new database and tenant for your project
-
-### 2. Get Your ChromaDB Credentials
-
-From your ChromaDB Cloud dashboard, you'll need:
-- **API Key**: Your authentication token
-- **Tenant ID**: Your unique tenant identifier 
-- **Database Name**: The database you want to use (e.g., "vibeallcoding")
-
-### 3. Set Your ChromaDB Environment Variables
-
-Add these to your environment configuration:
-- `CHROMA_API_KEY`: Your ChromaDB Cloud API key
-- `CHROMA_TENANT`: Your tenant ID
-- `CHROMA_DATABASE`: Your database name
-
-Note: Embeddings are automatically generated using ChromaDB's default embedding function, so no additional API keys are required for vector operations.
-
-## Environment Variables
-
-- `ANTHROPIC_API_KEY`: Required for the suggest_issues tool to work with Claude AI
-- `NOTION_API_KEY`: Required for Notion integration features
-- `CHROMA_API_KEY`: Required for ChromaDB vector storage (for task examples)
-- `CHROMA_TENANT`: Your ChromaDB tenant ID
-- `CHROMA_DATABASE`: Your ChromaDB database name
-
-## Tools Available
-
-### suggest_issues
-Breaks down complex tasks or feature requests into manageable, actionable development issues.
-
-**Parameters:**
-- `task` (string): The task or feature request to break down
-
-**Returns:**
-- Structured list of 2-4 actionable issues
-- Each issue designed to take ~30 minutes of focused work
-- AI-powered analysis with error handling
-
-## Example Usage
-
-Once configured with Claude Desktop, you can use commands like:
-- "Break down building a user authentication system into development issues"
-- "Suggest issues for implementing a REST API with user management"
-- "Help me plan out a new feature for user dashboard analytics"
-
-## Testing Your Setup
-
-Use the included test script to verify your Notion integration works:
+### Test with MCP Inspector
 
 ```bash
-# Test your Notion API key and database access
-node scripts/notion-crawler.js your-database-id
+npx @modelcontextprotocol/inspector gwanli-mcp
 ```
 
-This script will:
-- Verify your `NOTION_API_KEY` environment variable
-- Test database access and permissions
-- Fetch and display all pages from your database
-- Show page content and metadata
+## Workspace Management
 
-## Local CLI Usage - Gwanli (관리)
-
-This project includes **Gwanli (관리)** - a CLI for local Notion management. "관리" means "management" in Korean.
-
-### Quick Start
+### Syncing Data
 
 ```bash
-# Install dependencies
-bun install
+# Sync entire workspace
+npx gwanli index
 
-# Run CLI commands directly (builds automatically)
-bun run cli --help
-bun run cli hello
-bun run cli index --token "your-notion-token"
+# Sync specific page and its children
+npx gwanli sync "/projects/roadmap"
+
+# Sync specific database entries
+npx gwanli db sync "/projects/tasks"
 ```
 
-### All CLI Commands
-
-**Help Command**:
-```bash
-bun run cli --help
-```
-
-**Hello Command** (test the CLI):
-```bash
-bun run cli hello
-```
-
-**Index Command** (list Notion pages):
-```bash
-# Using environment variable for token
-export NOTION_TOKEN="your-notion-integration-token"
-bun run cli index
-
-# Or pass token directly
-bun run cli index --token "your-notion-integration-token"
-
-# Index a specific database
-bun run cli index --database "your-database-id"
-```
-
-### Alternative: Manual Build and Run
-
-If you prefer to build manually:
+### Workspace Exploration
 
 ```bash
-# Build the project
-bun run build
+# Show workspace structure
+npx gwanli tree "/"
 
-# Run from the gwanli package directory
-cd packages/gwanli
-node dist/cli.js --help
+# Find all databases
+npx gwanli list "/**" --type database
+
+# Find all pages containing specific text
+npx gwanli search "quarterly review"
+
+# List pages by pattern
+npx gwanli list "/projects/*/roadmap"  # All project roadmaps
+npx gwanli list "/**/meeting-notes"    # All meeting notes
 ```
 
-### Setting Up Your Notion Token
+## Common Workflows
 
-You can provide your Notion integration token in two ways:
-
-1. **Environment variable** (recommended):
-   ```bash
-   export NOTION_TOKEN="your-notion-integration-token"
-   ```
-
-2. **Command line option**:
-   ```bash
-   bun run cli index --token "your-notion-integration-token"
-   ```
-
-The CLI will display all accessible pages with their titles, IDs, URLs, and timestamps.
-
-## Development
-
-This is a TypeScript project using ES modules and the MCP SDK.
+### Project Management
 
 ```bash
-# Install dependencies
-bun install
+# View current sprint tasks
+npx gwanli db get "/projects/tasks" \
+  --where "Sprint = Current" \
+  --where "Status != Done" \
+  --columns "Title,Assignee,Priority"
 
-# Build the project
-bun run build
+# Add new task
+npx gwanli db add "/projects/tasks" --data '{
+  "Title": "Implement user authentication",
+  "Status": "Todo",
+  "Priority": 3,
+  "Sprint": "Current",
+  "Assignee": "John"
+}'
 
-# Run tests
-bun test
+# Update task status
+npx gwanli db update "/projects/tasks" \
+  --row-id "page_123" \
+  --data '{"Status": "In Progress"}'
+
+# Generate weekly report
+npx gwanli create "/projects/reports/week-$(date +%Y-%m-%d)" \
+  --content "# Weekly Report\n\n$(npx gwanli db get '/projects/tasks' --where 'Status = Done' --format markdown)"
 ```
 
-## Repository Structure
+### Personal Knowledge Management
 
-- `packages/mcp/` - MCP server implementation
-- `packages/gh-action/` - GitHub Action integration
-- `scripts/` - Testing and utility scripts
-- `apps/web/` - Web interface (planned)
+```bash
+# Daily note template
+npx gwanli create "/notes/daily/$(date +%Y-%m-%d)" --content "# $(date +%Y-%m-%d)\n\n## Tasks\n\n## Notes\n\n## Reflections"
+
+# Find all notes mentioning a topic
+npx gwanli search "machine learning" --scope "/notes"
+
+# Weekly review of completed tasks
+npx gwanli db get "/personal/tasks" \
+  --where "Completed = true" \
+  --where "Date >= $(date -d '7 days ago' +%Y-%m-%d)"
+```
+
+### Content Migration
+
+```bash
+# Export database as JSON for processing
+npx gwanli db get "/old-project/tasks" --format json > tasks.json
+
+# Bulk create pages from data
+cat tasks.json | jq -r '.[] | "/new-project/tasks/" + .id' | while read slug; do
+  npx gwanli create "$slug" --content "# Task\n\nMigrated from old project"
+done
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+NOTION_TOKEN=secret_your_integration_token_here
+GWANLI_DB_PATH=/path/to/workspace.db  # Optional: custom database location
+GWANLI_CACHE_TTL=3600                 # Optional: cache TTL in seconds
+```
+
+### Configuration File
+
+Create `~/.gwanli/config.json`:
+
+```json
+{
+  "notion_token": "secret_your_integration_token_here",
+  "db_path": "~/Documents/gwanli-workspace.db",
+  "default_format": "markdown",
+  "auto_sync": false
+}
+```
+
+## Data Storage
+
+Gwanli stores your Notion data locally in SQLite for fast access:
+
+- **Pages**: Stored as Markdown with metadata
+- **Database entries**: Properties stored as JSON key-value pairs
+- **Schemas**: Column definitions for validation
+- **Content**: Full-text searchable
+
+### Database Location
+
+By default, Gwanli stores data in:
+
+- macOS: `~/Library/Application Support/gwanli/workspace.db`
+- Linux: `~/.local/share/gwanli/workspace.db`
+- Windows: `%APPDATA%/gwanli/workspace.db`
+
+## Troubleshooting
+
+### Common Issues
+
+**"Integration not found"**
+
+- Ensure you've shared the specific pages with your integration
+- Check that your token is correct and starts with `secret_`
+
+**"No pages found"**
+
+- Run `npx gwanli index` to sync your workspace
+- Verify pages are shared with your integration
+
+**"Database not found"**
+
+- Ensure the database page is shared with your integration
+- Check the slug path with `npx gwanli list "/**"`
+
+### Getting Help
+
+```bash
+# View help for any command
+npx gwanli --help
+npx gwanli db --help
+npx gwanli search --help
+
+# Check current configuration
+npx gwanli config
+
+# Verify integration access
+npx gwanli test-connection
+```
+
+## Privacy and Security
+
+- All data is stored locally on your machine
+- Gwanli only accesses pages explicitly shared with your integration
+- No data is sent to external services (except Notion for syncing)
+- Integration tokens are stored securely in environment variables
 
 ## License
 
-MIT
+MIT License - see LICENSE file for details.
+
+---
+
+Transform your Notion workspace into a powerful, queryable knowledge base with filesystem-like navigation and instant local search.
