@@ -22,7 +22,7 @@ server.registerTool(
   "auth",
   {
     description:
-      "Authenticate user by opening browser for API key setup or showing current status",
+      "Verify your Notion API key is set up correctly or provision a new one in the event it is not set up correctly",
     inputSchema: {},
   },
   async () => {

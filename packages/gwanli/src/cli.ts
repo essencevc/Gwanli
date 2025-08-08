@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { helloGwanli, indexNotionPages } from "gwanli-core";
+import { indexNotionPages } from "gwanli-core";
 import { exec } from "child_process";
 
 const program = new Command("gwanli");
@@ -9,14 +9,7 @@ const program = new Command("gwanli");
 program
   .name("gwanli")
   .description("Gwanli - Notion management CLI")
-  .version("0.1.0");
-
-program
-  .command("hello")
-  .description("Say hello from Gwanli")
-  .action(() => {
-    console.log(helloGwanli());
-  });
+  .version("0.2.0");
 
 program
   .command("index")
@@ -42,30 +35,44 @@ program
   .description("Interactively generate a Notion API token")
   .action(async () => {
     console.log("\n🔐 Notion API Token Generator");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
     console.log("\n🚀 Opening authentication page in your browser...");
-    
+
     const workerUrl = "https://worker.ivanleomk9297.workers.dev";
-    
+
     // Open URL in default browser
-    const openCommand = process.platform === 'darwin' ? 'open' : 
-                       process.platform === 'win32' ? 'start' : 'xdg-open';
-    
+    const openCommand =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+
     exec(`${openCommand} ${workerUrl}`, (error) => {
       if (error) {
-        console.log(`\n❌ Could not open browser automatically. Please visit: ${workerUrl}`);
+        console.log(
+          `\n❌ Could not open browser automatically. Please visit: ${workerUrl}`
+        );
       } else {
         console.log(`\n✅ Browser opened to: ${workerUrl}`);
       }
     });
-    
+
     console.log("\nAfter completing authentication:");
     console.log("1. Copy the generated token");
     console.log("2. Set it as an environment variable:");
     console.log("   export NOTION_API_KEY=your_token_here");
-    console.log("\nAlternatively, you can use the --token option with any gwanli command.");
-    console.log("\n💡 For more details about the worker, check: ./worker/index.ts");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(
+      "\nAlternatively, you can use the --token option with any gwanli command."
+    );
+    console.log(
+      "\n💡 For more details about the worker, check: ./worker/index.ts"
+    );
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
   });
 
 program.parse();
