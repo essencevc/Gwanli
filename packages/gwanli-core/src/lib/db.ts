@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, mkdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { homedir } from "os";
 import Database from "better-sqlite3";
 import type { ConvertedPage, DatabasePageRecord } from "../types/database.js";
 import type { IdToSlugMap } from "../types/notion.js";
@@ -16,10 +17,27 @@ const initSqlPath = join(__dirname, "../sql/init.sql");
 const initSql = readFileSync(initSqlPath, "utf-8");
 
 export function initialise_db(DB_PATH: string): Database.Database {
-  if (existsSync(DB_PATH)) {
-    unlinkSync(DB_PATH);
+  // Expand ~ to home directory
+  const expandedPath = DB_PATH.startsWith("~/")
+    ? join(homedir(), DB_PATH.slice(2))
+    : DB_PATH;
+
+  // Ensure the directory exists
+  const dbDir = dirname(expandedPath);
+  if (!existsSync(dbDir)) {
+    mkdirSync(dbDir, { recursive: true });
   }
-  const db = new Database(DB_PATH);
+
+  if (existsSync(expandedPath)) {
+    unlinkSync(expandedPath);
+  }
+  let db: Database.Database;
+  try {
+    db = new Database(expandedPath);
+  } catch (error) {
+    console.error("Error initialising database at path:", expandedPath, error);
+    throw error;
+  }
 
   // Execute the initialization SQL
   db.exec(initSql);
@@ -27,20 +45,11 @@ export function initialise_db(DB_PATH: string): Database.Database {
   return db;
 }
 
-function extractTitleFromPage(page: PageObjectResponse): string {
-  const titleProp = Object.values(page.properties).find(
-    (prop) => prop.type === "title"
-  ) as any;
-  return titleProp?.title?.[0]?.plain_text || "Untitled";
-}
-
 export function insertPages(
   db: Database.Database,
   convertedPages: ConvertedPage[]
 ): void {
   if (convertedPages.length === 0) return;
-
-  console.log(`Attempting to insert ${convertedPages.length} pages...`);
 
   const values = convertedPages.map(() => `(?, ?, ?, ?, ?, ?)`).join(", ");
 
@@ -60,18 +69,10 @@ export function insertPages(
     ];
   });
 
-  console.log(`SQL: ${sql.substring(0, 200)}...`);
-  console.log(`First page params:`, params.slice(0, 6));
-
   try {
     const insertStmt = db.prepare(sql);
-    const result = insertStmt.run(...params);
-    console.log(`Insert result:`, result);
-    console.log(
-      `Changes: ${result.changes}, Last insert rowid: ${result.lastInsertRowid}`
-    );
+    insertStmt.run(...params);
   } catch (error) {
-    console.error("Error inserting pages:", error);
     throw error;
   }
 }
@@ -82,8 +83,6 @@ export function insertDatabases(
   id_to_slug: IdToSlugMap
 ): void {
   if (databases.length === 0) return;
-
-  console.log(`Attempting to insert ${databases.length} databases...`);
 
   const values = databases.map(() => `(?, ?, ?, ?, ?, ?)`).join(", ");
 
@@ -107,9 +106,7 @@ export function insertDatabases(
   try {
     const insertStmt = db.prepare(sql);
     const result = insertStmt.run(...params);
-    console.log(`Database insert result:`, result);
   } catch (error) {
-    console.error("Error inserting databases:", error);
     throw error;
   }
 }
@@ -119,8 +116,6 @@ export function insertDatabasePages(
   databasePages: DatabasePageRecord[]
 ): void {
   if (databasePages.length === 0) return;
-
-  console.log(`Attempting to insert ${databasePages.length} database pages...`);
 
   const values = databasePages.map(() => `(?, ?, ?, ?, ?)`).join(", ");
 
@@ -144,9 +139,7 @@ export function insertDatabasePages(
   try {
     const insertStmt = db.prepare(sql);
     const result = insertStmt.run(...params);
-    console.log(`Database pages insert result:`, result);
   } catch (error) {
-    console.error("Error inserting database pages:", error);
     throw error;
   }
 }
@@ -161,10 +154,10 @@ export function getAllSlugs(db: Database.Database): string[] {
     const databaseStmt = db.prepare("SELECT slug FROM database");
     const databaseSlugs = databaseStmt.all() as { slug: string }[];
 
-    // Combine and extract slug strings
+    // Combine and add visual indicators
     const allSlugs = [
-      ...pageSlugs.map(row => row.slug),
-      ...databaseSlugs.map(row => row.slug)
+      ...pageSlugs.map((row) => row.slug),
+      ...databaseSlugs.map((row) => row.slug),
     ];
 
     return allSlugs;
