@@ -1,168 +1,423 @@
 import { Client } from "@notionhq/client";
+import type {
+  SearchResponse,
+  PageObjectResponse,
+  DatabaseObjectResponse,
+} from "@notionhq/client/build/src/api-endpoints.js";
 import { NotionToMarkdown } from "notion-to-md";
-import { z } from "zod";
+import pLimit from "p-limit";
+import { markdownTable } from "markdown-table";
+import type { IdToSlugMap } from "../types/notion.js";
+import type { PageRecord, DatabasePageRecord } from "../types/database.js";
 
-export interface NotionPage {
-  id: string;
-  title: string;
-  content?: string;
-  lastUpdated: string;
+// Rate limit to 3 requests per second
+const limit = pLimit(2);
+
+// Function to create formatted markdown table
+function createDatabaseTable(
+  title: string,
+  headers: string[],
+  rows: any[]
+): string {
+  if (headers.length === 0 || rows.length === 0) {
+    return `## ${title}\n\n*No entries found*`;
+  }
+
+  // Create table data with headers as first row
+  const tableData = [
+    headers,
+    ...rows.map((row) =>
+      headers.map((header) => {
+        const value = String(row.properties[header] || "");
+        return value.length > 50 ? value.slice(0, 47) + "..." : value;
+      })
+    ),
+  ];
+
+  return `## ${title}\n\n${markdownTable(tableData)}`;
 }
 
-export interface NotionDatabasePage {
-  id: string;
-  title?: string;
-  content?: string;
-  lastUpdated: string;
-  database_order?: number;
+export async function fetchAllPages(notion: Client) {
+  const allPages: PageObjectResponse[] = [];
+  let hasMore = true;
+  let nextCursor: string | undefined = undefined;
+
+  while (hasMore) {
+    try {
+      // Use rate limiting for each request
+      const response = await limit(() =>
+        notion.search({
+          page_size: 100,
+          start_cursor: nextCursor,
+          filter: {
+            property: "object",
+            value: "page",
+          },
+        })
+      );
+
+      allPages.push(
+        ...(response.results.filter(
+          (result) => "properties" in result
+        ) as PageObjectResponse[])
+      );
+      hasMore = response.has_more;
+      nextCursor = response.next_cursor || undefined;
+
+      // Small delay between batches to be extra cautious
+      if (hasMore) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      console.error("Error fetching pages:", error);
+      throw error;
+    }
+  }
+
+  const databaseChildren = allPages.filter(isDatabaseChild);
+  const regularPages = allPages.filter((page) => !isDatabaseChild(page));
+
+  return {
+    databaseChildren,
+    regularPages,
+  };
 }
 
-export const DatabasePageSchema = z.object({
-  id: z.string(),
-  title: z.string().optional(),
-  content: z.string().default(""),
-  lastUpdated: z.string(),
-  database_order: z.number().int().optional()
-});
-
-export interface FetchResult {
-  pages: NotionPage[];
-  databases: string[];
+export function isDatabaseChild(page: PageObjectResponse): boolean {
+  return page.parent?.type === "database_id";
 }
 
-export interface NotionDatabase {
-  id: string;
-  title?: string;
-  lastUpdated: string;
-  properties: Record<string, any>;
+export async function fetchAllDatabases(notion: Client) {
+  const allDatabases: DatabaseObjectResponse[] = [];
+  let hasMore = true;
+  let nextCursor: string | undefined = undefined;
+
+  while (hasMore) {
+    try {
+      // Use rate limiting for each request
+      const response = await limit(() =>
+        notion.search({
+          page_size: 100,
+          start_cursor: nextCursor,
+          filter: {
+            property: "object",
+            value: "database",
+          },
+        })
+      );
+
+      allDatabases.push(
+        ...(response.results.filter(
+          (result) => "title" in result
+        ) as DatabaseObjectResponse[])
+      );
+      hasMore = response.has_more;
+      nextCursor = response.next_cursor || undefined;
+
+      // Small delay between batches to be extra cautious
+      if (hasMore) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      console.error("Error fetching databases:", error);
+      throw error;
+    }
+  }
+
+  return allDatabases;
+}
+
+export function processProperties(
+  properties: Record<string, any>
+): Record<string, string> {
+  const extracted: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(properties)) {
+    const prop = value;
+
+    switch (prop.type) {
+      case "title":
+        if (prop.title && prop.title.length > 0) {
+          extracted[key] = prop.title[0].plain_text || "";
+        }
+        break;
+      case "rich_text":
+        if (prop.rich_text && prop.rich_text.length > 0) {
+          extracted[key] = prop.rich_text
+            .map((rt: { plain_text?: string }) => rt.plain_text || "")
+            .join("");
+        }
+        break;
+      case "select":
+        extracted[key] = prop.select?.name || "";
+        break;
+      case "multi_select":
+        extracted[key] =
+          prop.multi_select
+            ?.map((ms: { name: string }) => ms.name)
+            .join(", ") || "";
+        break;
+      case "date":
+        extracted[key] = prop.date?.start || "";
+        break;
+      case "number":
+        extracted[key] = prop.number?.toString() || "";
+        break;
+      case "checkbox":
+        extracted[key] = prop.checkbox ? "true" : "false";
+        break;
+      case "url":
+        extracted[key] = prop.url || "";
+        break;
+      case "email":
+        extracted[key] = prop.email || "";
+        break;
+      case "phone_number":
+        extracted[key] = prop.phone_number || "";
+        break;
+      default:
+        extracted[key] = "";
+    }
+  }
+
+  return extracted;
+}
+
+function sanitizeSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function extractTitle(
+  item: PageObjectResponse | DatabaseObjectResponse
+): string {
+  if ("title" in item) {
+    // Database
+    return item.title?.[0]?.plain_text || "untitled";
+  } else {
+    // Page
+    const titleProp = Object.values(item.properties).find(
+      (prop) => prop.type === "title"
+    ) as any;
+    return titleProp?.title?.[0]?.plain_text || "untitled";
+  }
+}
+
+function isWorkspaceRoot(
+  item: PageObjectResponse | DatabaseObjectResponse
+): boolean {
+  return item.parent?.type === "workspace";
+}
+
+function getParentId(
+  item: PageObjectResponse | DatabaseObjectResponse
+): string | null {
+  if (item.parent?.type === "page_id") {
+    return item.parent.page_id;
+  }
+  return null;
+}
+
+export function generateSlugs(
+  pages: PageObjectResponse[],
+  databases: DatabaseObjectResponse[]
+): IdToSlugMap {
+  const items = [...pages, ...databases];
+  const slugMap: IdToSlugMap = {};
+  const usedSlugs = new Set<string>();
+
+  function processItems(
+    currentParent: string | null,
+    parentSlug: string = ""
+  ): void {
+    // Find items with the current parent
+    const children = items.filter((item) => {
+      if (currentParent === null) {
+        return isWorkspaceRoot(item);
+      }
+      return getParentId(item) === currentParent;
+    });
+
+    for (const item of children) {
+      const title = extractTitle(item);
+      let slug = sanitizeSlug(title);
+
+      // Handle duplicates by adding suffix
+      let finalSlug = slug;
+      let counter = 1;
+      while (usedSlugs.has(parentSlug + "/" + finalSlug)) {
+        finalSlug = `${slug}-${counter}`;
+        counter++;
+      }
+
+      const fullSlug = parentSlug + "/" + finalSlug;
+      slugMap[item.id] = {
+        slug: fullSlug,
+        name: title,
+      };
+      usedSlugs.add(fullSlug);
+
+      // Recursively process children of this item
+      processItems(item.id, fullSlug);
+    }
+  }
+
+  // Start with workspace root items
+  processItems(null);
+
+  return slugMap;
+}
+
+function processNotionLinks(
+  markdownContent: string,
+  id_to_slug: IdToSlugMap
+): string {
+  return markdownContent.replace(
+    /\[([^\]]*)\]\(https:\/\/www\.notion\.so\/[^\/]*\/([a-f0-9]{32})[^\)]*\)/g,
+    (match: string, linkText: string, pageId: string) => {
+      if (id_to_slug[pageId]) {
+        return `[${linkText}](${id_to_slug[pageId].slug})`;
+      }
+      return match; // Return original if no mapping found
+    }
+  );
 }
 
 export async function convertPageToMarkdown(
   notion: Client,
-  pageId: string
-): Promise<string> {
-  const n2m = new NotionToMarkdown({ notionClient: notion });
+  page: PageObjectResponse,
+  id_to_slug: IdToSlugMap
+): Promise<PageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
 
-  try {
-    const mdblocks = await n2m.pageToMarkdown(pageId);
-    return n2m.toMarkdownString(mdblocks).parent;
-  } catch (error) {
-    console.error(`Failed to convert page ${pageId} to markdown:`, error);
-    return "";
-  }
+  // Extract title from regular page
+  // @ts-ignore
+  const title = page.properties.title?.title?.[0]?.plain_text || "untitled";
+
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
+    .filter(Boolean)
+    .join("\n\n");
+
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
+
+  return {
+    id: page.id,
+    title,
+    content: `${title}\n\n${markdownContent}`,
+    slug: id_to_slug[page.id].slug,
+    createdAt: page.created_time,
+    lastUpdated: page.last_edited_time,
+  };
 }
 
-export async function fetchDatabaseChildren(
+export async function convertDatabasePageToMarkdown(
   notion: Client,
-  databaseId: string
-): Promise<NotionDatabasePage[]> {
-  const children: NotionDatabasePage[] = [];
-  let hasMore = true;
-  let nextCursor: string | null = null;
-  let order = 0;
+  page: PageObjectResponse,
+  id_to_slug: IdToSlugMap
+): Promise<DatabasePageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
 
-  while (hasMore) {
-    const response = await notion.databases.query({
-      database_id: databaseId,
-      start_cursor: nextCursor || undefined,
-      sorts: [
-        {
-          property: "Name",
-          direction: "ascending"
-        }
-      ]
-    });
+  // Process properties for database page
+  const properties = processProperties(page.properties);
 
-    for (const page of response.results as any[]) {
-      const title = page.properties?.Name?.title?.[0]?.plain_text;
-      
-      children.push({
-        id: page.id,
-        title,
-        content: "",
-        lastUpdated: page.last_edited_time,
-        database_order: order++
-      });
-    }
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
+    .filter(Boolean)
+    .join("\n\n");
 
-    hasMore = response.has_more;
-    nextCursor = response.next_cursor;
-  }
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
 
-  return children;
+  return {
+    id: page.id,
+    properties,
+    content: markdownContent,
+    createdAt: page.created_time,
+    lastUpdated: page.last_edited_time,
+  };
 }
 
-export async function fetchDatabaseInfo(
+function initializeMarkdownConverter(
   notion: Client,
-  databaseIds: string[]
-): Promise<NotionDatabase[]> {
-  const databases: NotionDatabase[] = [];
+  id_to_slug: IdToSlugMap
+): NotionToMarkdown {
+  const n2m = new NotionToMarkdown({
+    notionClient: notion,
+  });
 
-  for (const databaseId of databaseIds) {
+  // Custom transformer for child_database blocks - render as links
+  n2m.setCustomTransformer("child_database", async (block) => {
+    const { child_database } = block as any;
+    const id = block.id;
+    const title = child_database?.title || "Untitled Database";
+
     try {
-      const database = await notion.databases.retrieve({
-        database_id: databaseId,
+      // Query the database to get first 3 created entries
+      const response = await notion.databases.query({
+        database_id: id,
+        page_size: 3,
+        sorts: [
+          {
+            timestamp: "created_time",
+            direction: "ascending",
+          },
+        ],
+      });
+      const rows = response.results.map((item) => {
+        return {
+          id: item.id,
+          //@ts-ignore
+          properties: processProperties(item.properties),
+        };
       });
 
-      const title = (database as any).title?.[0]?.plain_text || "";
-      
-      databases.push({
-        id: database.id,
-        title,
-        lastUpdated: (database as any).last_edited_time,
-        properties: (database as any).properties,
-      });
+      // Extract headers from first row
+      const headers = rows.length > 0 ? Object.keys(rows[0].properties) : [];
+
+      // Use markdown-table to render the database as a formatted table
+      return createDatabaseTable(
+        `${title} (Database Id: ${id})`,
+        headers,
+        rows
+      );
     } catch (error) {
-      console.error(`Error fetching database ${databaseId}:`, error);
+      console.warn(`Could not fetch database entries for ${id}:`, error);
+      return createDatabaseTable(title, [], []);
     }
-  }
+  });
 
-  return databases;
-}
+  // Custom transformer for child_page blocks
+  n2m.setCustomTransformer("child_page", async (block) => {
+    const childPageBlock = block as any;
+    const childPageId = block.id;
+    const childPageTitle = childPageBlock.child_page?.title || "Untitled Page";
 
-export async function fetchNotionData(
-  notion: Client,
-  offset?: string
-): Promise<FetchResult> {
-  const pages: NotionPage[] = [];
-  const databases = new Set<string>();
-  let cursor = offset;
-  let hasMore = true;
-
-  while (hasMore) {
-    const response = await notion.search({
-      filter: {
-        value: "page",
-        property: "object",
-      },
-      start_cursor: cursor,
-      page_size: 100,
-    });
-
-    // Process each page and separate by parent type
-    for (const page of response.results as any[]) {
-      const has_database_parent = page.parent?.type === "database_id";
-
-      if (has_database_parent) {
-        // Add database ID to set
-        databases.add(page.parent.database_id);
-      } else {
-        // For non-database parents, title is in properties.title
-        const title = page.properties?.title?.title?.[0]?.plain_text;
-        
-        // Add to regular pages
-        pages.push({
-          id: page.id,
-          title,
-          content: "",
-          lastUpdated: page.last_edited_time,
-        });
-      }
+    if (id_to_slug[childPageId]) {
+      return `[${childPageTitle}](${id_to_slug[childPageId].slug})`;
     }
+    return `[${childPageTitle}](notion://page/${childPageId})`;
+  });
 
-    hasMore = response.has_more;
-    cursor = response.next_cursor || undefined;
-  }
+  // Custom transformer for link_to_page blocks
+  n2m.setCustomTransformer("link_to_page", async (block) => {
+    const linkToPage = block as any;
+    const pageId = linkToPage.link_to_page?.page_id;
 
-  return { pages, databases: Array.from(databases) };
+    if (pageId && id_to_slug[pageId]) {
+      return `[${id_to_slug[pageId].name}](${id_to_slug[pageId].slug})`;
+    }
+    return false; // Return false for default behavior
+  });
+
+  return n2m;
 }

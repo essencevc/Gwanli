@@ -1,101 +1,152 @@
-import Database, { type Database as DatabaseType } from "better-sqlite3";
-import { readFileSync, existsSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { z } from "zod";
+import Database from "better-sqlite3";
+import type { ConvertedPage, DatabasePageRecord } from "../types/database.js";
+import type { IdToSlugMap } from "../types/notion.js";
+import type {
+  PageObjectResponse,
+  DatabaseObjectResponse,
+} from "@notionhq/client/build/src/api-endpoints.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export const NotionPage = z.object({
-  id: z.string(),
-  title: z.string().optional(),
-  content: z.string(),
-  lastUpdated: z.string(),
-});
+const initSqlPath = join(__dirname, "../sql/init.sql");
+const initSql = readFileSync(initSqlPath, "utf-8");
 
-export function initdb(db_path: string): DatabaseType {
-  console.log(`Initializing database at: ${db_path}`);
-  // Delete existing database if it exists
-  if (existsSync(db_path)) {
-    unlinkSync(db_path);
+export function initialise_db(DB_PATH: string): Database.Database {
+  if (existsSync(DB_PATH)) {
+    unlinkSync(DB_PATH);
   }
+  const db = new Database(DB_PATH);
 
-  const db = new Database(db_path);
-
-  // Read and execute init.sql
-  const initSql = readFileSync(join(__dirname, "init.sql"), "utf-8");
+  // Execute the initialization SQL
   db.exec(initSql);
 
   return db;
 }
 
-export function savePages(db: DatabaseType, pages: unknown[]) {
-  const validatedPages = z.array(NotionPage).parse(pages);
+function extractTitleFromPage(page: PageObjectResponse): string {
+  const titleProp = Object.values(page.properties).find(
+    (prop) => prop.type === "title"
+  ) as any;
+  return titleProp?.title?.[0]?.plain_text || "Untitled";
+}
 
-  const insertStmt = db.prepare(`
-    INSERT INTO page (id, title, content, lastUpdated)
-    VALUES (?, ?, ?, ?)
-  `);
+export function insertPages(
+  db: Database.Database,
+  convertedPages: ConvertedPage[]
+): void {
+  if (convertedPages.length === 0) return;
 
-  for (const page of validatedPages) {
-    insertStmt.run(
-      page.id,
-      page.title || null,
-      page.content,
-      page.lastUpdated
+  console.log(`Attempting to insert ${convertedPages.length} pages...`);
+
+  const values = convertedPages.map(() => `(?, ?, ?, ?, ?, ?)`).join(", ");
+
+  const sql = `
+    INSERT OR REPLACE INTO page (id, title, content, slug, createdAt, lastUpdated)
+    VALUES ${values}
+  `;
+
+  const params = convertedPages.flatMap((converted, index) => {
+    return [
+      converted.id,
+      converted.title,
+      converted.content,
+      converted.slug,
+      converted.createdAt,
+      converted.lastUpdated,
+    ];
+  });
+
+  console.log(`SQL: ${sql.substring(0, 200)}...`);
+  console.log(`First page params:`, params.slice(0, 6));
+
+  try {
+    const insertStmt = db.prepare(sql);
+    const result = insertStmt.run(...params);
+    console.log(`Insert result:`, result);
+    console.log(
+      `Changes: ${result.changes}, Last insert rowid: ${result.lastInsertRowid}`
     );
+  } catch (error) {
+    console.error("Error inserting pages:", error);
+    throw error;
   }
 }
 
-export function saveDatabasePages(db: DatabaseType, databasePages: unknown[]) {
-  const DatabasePageSchema = z.object({
-    id: z.string(),
-    title: z.string().optional(),
-    content: z.string().default(""),
-    lastUpdated: z.string(),
-    database_order: z.number().int().optional()
-  });
+export function insertDatabases(
+  db: Database.Database,
+  databases: DatabaseObjectResponse[],
+  id_to_slug: IdToSlugMap
+): void {
+  if (databases.length === 0) return;
 
-  const validatedPages = z.array(DatabasePageSchema).parse(databasePages);
+  console.log(`Attempting to insert ${databases.length} databases...`);
 
-  const insertStmt = db.prepare(`
-    INSERT INTO database_page (id, title, content, lastUpdated, database_order)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+  const values = databases.map(() => `(?, ?, ?, ?, ?, ?)`).join(", ");
 
-  for (const page of validatedPages) {
-    insertStmt.run(
-      page.id,
-      page.title || null,
-      page.content,
-      page.lastUpdated,
-      page.database_order || null
-    );
-  }
-}
+  const sql = `
+    INSERT OR REPLACE INTO database (id, title, slug, properties, createdAt, lastUpdated)
+    VALUES ${values}
+  `;
 
-export function saveDatabases(db: DatabaseType, databases: unknown[]) {
-  const DatabaseSchema = z.object({
-    id: z.string(),
-    title: z.string().optional(),
-    lastUpdated: z.string(),
-    properties: z.record(z.any())
-  });
-
-  const validatedDatabases = z.array(DatabaseSchema).parse(databases);
-
-  const insertStmt = db.prepare(`
-    INSERT INTO database (id, title, lastUpdated, properties)
-    VALUES (?, ?, ?, ?)
-  `);
-
-  for (const database of validatedDatabases) {
-    insertStmt.run(
+  const params = databases.flatMap((database) => {
+    const title = database.title?.[0]?.plain_text || "Untitled";
+    return [
       database.id,
-      database.title || null,
-      database.lastUpdated,
-      JSON.stringify(database.properties)
-    );
+      title,
+      id_to_slug[database.id].slug || "",
+      JSON.stringify(database.properties),
+      database.created_time,
+      database.last_edited_time,
+    ];
+  });
+
+  try {
+    const insertStmt = db.prepare(sql);
+    const result = insertStmt.run(...params);
+    console.log(`Database insert result:`, result);
+  } catch (error) {
+    console.error("Error inserting databases:", error);
+    throw error;
+  }
+}
+
+export function insertDatabasePages(
+  db: Database.Database,
+  databasePages: DatabasePageRecord[]
+): void {
+  if (databasePages.length === 0) return;
+
+  console.log(`Attempting to insert ${databasePages.length} database pages...`);
+
+  const values = databasePages.map(() => `(?, ?, ?, ?, ?)`).join(", ");
+
+  const sql = `
+    INSERT OR REPLACE INTO database_page (id, properties, content, createdAt, lastUpdated)
+    VALUES ${values}
+  `;
+
+  const params = databasePages.flatMap((page) => {
+    // Extract properties as JSON
+
+    return [
+      page.id,
+      JSON.stringify(page.properties),
+      page.content,
+      page.createdAt,
+      page.lastUpdated,
+    ];
+  });
+
+  try {
+    const insertStmt = db.prepare(sql);
+    const result = insertStmt.run(...params);
+    console.log(`Database pages insert result:`, result);
+  } catch (error) {
+    console.error("Error inserting database pages:", error);
+    throw error;
   }
 }
