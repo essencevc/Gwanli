@@ -2,7 +2,8 @@ import { existsSync, readFileSync, unlinkSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import Database from "better-sqlite3";
-import type { ConvertedPage, DatabasePageRecord } from "./notion.js";
+import type { ConvertedPage, DatabasePageRecord } from "../types/database.js";
+import type { IdToSlugMap } from "../types/notion.js";
 import type {
   PageObjectResponse,
   DatabaseObjectResponse,
@@ -78,7 +79,7 @@ export function insertPages(
 export function insertDatabases(
   db: Database.Database,
   databases: DatabaseObjectResponse[],
-  id_to_slug: Record<string, { slug: string; name: string }>
+  id_to_slug: IdToSlugMap
 ): void {
   if (databases.length === 0) return;
 

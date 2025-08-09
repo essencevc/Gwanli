@@ -1,5 +1,6 @@
 import { Client } from "@notionhq/client";
 import pLimit from "p-limit";
+import { dirname, join } from "path";
 import {
   initialise_db,
   insertPages,
@@ -18,7 +19,10 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
   const notion = new Client({ auth: notionToken });
   const db = initialise_db(db_path);
 
-  // Rate limit to 2 concurrent requests
+  // Assets directory next to the DB
+  const assetsDir = join(dirname(db_path), "assets");
+
+  // Rate limit to 2 concurrent requests for Notion API
   const limit = pLimit(2);
 
   console.log(`Database initialized at ${db_path}`);
@@ -37,8 +41,6 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
   );
 
   const convertedPages = await Promise.all(conversionPromises);
-  insertPages(db, convertedPages);
-  console.log(`Inserted ${convertedPages.length} pages into database`);
 
   // 4. Insert databases
   insertDatabases(db, databases, id_to_slug);
@@ -50,9 +52,19 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
 
   const convertedDatabasePages = await Promise.all(conversionDatabasePromises);
 
-  // TODO: Handle database pages
+  insertPages(db, convertedPages);
+
   insertDatabasePages(db, convertedDatabasePages);
   console.log(
     `Inserted ${databaseChildren.length} database pages into database`
   );
 }
+
+// Export shared types
+export type {
+  PageRecord,
+  DatabasePageRecord,
+  DatabaseRecord,
+  ConvertedPage,
+} from "./types/database.js";
+export type { SlugMapping, IdToSlugMap } from "./types/notion.js";
