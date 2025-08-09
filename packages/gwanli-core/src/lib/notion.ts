@@ -7,6 +7,8 @@ import type {
 import { NotionToMarkdown } from "notion-to-md";
 import pLimit from "p-limit";
 import { markdownTable } from "markdown-table";
+import type { IdToSlugMap } from "../types/notion.js";
+import type { PageRecord, DatabasePageRecord } from "../types/database.js";
 
 // Rate limit to 3 requests per second
 const limit = pLimit(2);
@@ -223,9 +225,9 @@ function getParentId(
 export function generateSlugs(
   pages: PageObjectResponse[],
   databases: DatabaseObjectResponse[]
-): Record<string, { slug: string; name: string }> {
+): IdToSlugMap {
   const items = [...pages, ...databases];
-  const slugMap: Record<string, { slug: string; name: string }> = {};
+  const slugMap: IdToSlugMap = {};
   const usedSlugs = new Set<string>();
 
   function processItems(
@@ -270,45 +272,84 @@ export function generateSlugs(
   return slugMap;
 }
 
-export interface ConvertedPage {
-  id: string;
-  content: string;
-  slug: string;
-  createdAt: string;
-  lastUpdated: string;
-  title: string;
+function processNotionLinks(
+  markdownContent: string,
+  id_to_slug: IdToSlugMap
+): string {
+  return markdownContent.replace(
+    /\[([^\]]*)\]\(https:\/\/www\.notion\.so\/[^\/]*\/([a-f0-9]{32})[^\)]*\)/g,
+    (match: string, linkText: string, pageId: string) => {
+      if (id_to_slug[pageId]) {
+        return `[${linkText}](${id_to_slug[pageId].slug})`;
+      }
+      return match; // Return original if no mapping found
+    }
+  );
 }
 
-// Database schema types
-export interface PageRecord {
-  id: string;
-  title: string;
-  content: string;
-  slug: string;
-  createdAt: string;
-  lastUpdated: string;
+export async function convertPageToMarkdown(
+  notion: Client,
+  page: PageObjectResponse,
+  id_to_slug: IdToSlugMap
+): Promise<PageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
+
+  // Extract title from regular page
+  // @ts-ignore
+  const title = page.properties.title?.title?.[0]?.plain_text || "untitled";
+
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
+    .filter(Boolean)
+    .join("\n\n");
+
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
+
+  return {
+    id: page.id,
+    title,
+    content: `${title}\n\n${markdownContent}`,
+    slug: id_to_slug[page.id].slug,
+    createdAt: page.created_time,
+    lastUpdated: page.last_edited_time,
+  };
 }
 
-export interface DatabasePageRecord {
-  id: string;
-  properties: Record<string, string>;
-  content: string;
-  createdAt: string;
-  lastUpdated: string;
-}
+export async function convertDatabasePageToMarkdown(
+  notion: Client,
+  page: PageObjectResponse,
+  id_to_slug: IdToSlugMap
+): Promise<DatabasePageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
 
-export interface DatabaseRecord {
-  id: string;
-  title: string;
-  slug: string;
-  properties: Record<string, any>;
-  createdAt: string;
-  lastUpdated: string;
+  // Process properties for database page
+  const properties = processProperties(page.properties);
+
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
+    .filter(Boolean)
+    .join("\n\n");
+
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
+
+  return {
+    id: page.id,
+    properties,
+    content: markdownContent,
+    createdAt: page.created_time,
+    lastUpdated: page.last_edited_time,
+  };
 }
 
 function initializeMarkdownConverter(
   notion: Client,
-  id_to_slug: Record<string, { slug: string; name: string }>
+  id_to_slug: IdToSlugMap
 ): NotionToMarkdown {
   const n2m = new NotionToMarkdown({
     notionClient: notion,
@@ -379,79 +420,4 @@ function initializeMarkdownConverter(
   });
 
   return n2m;
-}
-
-function processNotionLinks(
-  markdownContent: string,
-  id_to_slug: Record<string, { slug: string; name: string }>
-): string {
-  return markdownContent.replace(
-    /\[([^\]]*)\]\(https:\/\/www\.notion\.so\/[^\/]*\/([a-f0-9]{32})[^\)]*\)/g,
-    (match: string, linkText: string, pageId: string) => {
-      if (id_to_slug[pageId]) {
-        return `[${linkText}](${id_to_slug[pageId].slug})`;
-      }
-      return match; // Return original if no mapping found
-    }
-  );
-}
-
-export async function convertPageToMarkdown(
-  notion: Client,
-  page: PageObjectResponse,
-  id_to_slug: Record<string, { slug: string; name: string }>
-): Promise<PageRecord> {
-  const n2m = initializeMarkdownConverter(notion, id_to_slug);
-  const mdBlocks = await n2m.pageToMarkdown(page.id);
-
-  // Extract title from regular page
-  // @ts-ignore
-  const title = page.properties.title?.title?.[0]?.plain_text || "untitled";
-
-  // Build markdown content
-  let markdownContent = mdBlocks
-    .map((block) => block.parent)
-    .filter(Boolean)
-    .join("\n\n");
-
-  // Process notion.so links
-  markdownContent = processNotionLinks(markdownContent, id_to_slug);
-
-  return {
-    id: page.id,
-    title,
-    content: `${title}\n\n${markdownContent}`,
-    slug: id_to_slug[page.id].slug,
-    createdAt: page.created_time,
-    lastUpdated: page.last_edited_time,
-  };
-}
-
-export async function convertDatabasePageToMarkdown(
-  notion: Client,
-  page: PageObjectResponse,
-  id_to_slug: Record<string, { slug: string; name: string }>
-): Promise<DatabasePageRecord> {
-  const n2m = initializeMarkdownConverter(notion, id_to_slug);
-  const mdBlocks = await n2m.pageToMarkdown(page.id);
-
-  // Process properties for database page
-  const properties = processProperties(page.properties);
-
-  // Build markdown content
-  let markdownContent = mdBlocks
-    .map((block) => block.parent)
-    .filter(Boolean)
-    .join("\n\n");
-
-  // Process notion.so links
-  markdownContent = processNotionLinks(markdownContent, id_to_slug);
-
-  return {
-    id: page.id,
-    properties,
-    content: markdownContent,
-    createdAt: page.created_time,
-    lastUpdated: page.last_edited_time,
-  };
 }

@@ -16,9 +16,14 @@ program
   .description("Index pages from your Notion workspace")
   .option("-t, --token <token>", "Notion integration token")
   .option("-d, --db <dbPath>", "Path to the SQLite database file")
+  .option(
+    "--assets-index <path>",
+    "Path to write the assets index JSON (defaults next to DB as assets-index.json)"
+  )
   .action(async (options) => {
     const token = options.token || process.env.NOTION_API_KEY;
     const dbPath = options.db || "./notion.db";
+    const assetsIndexPath = options.assetsIndex;
 
     if (!token) {
       console.error(
@@ -27,7 +32,7 @@ program
       process.exit(1);
     }
 
-    await indexNotionPages(token, dbPath);
+    await indexNotionPages(token, dbPath, assetsIndexPath);
   });
 
 program
