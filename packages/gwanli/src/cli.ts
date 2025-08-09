@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { indexNotionPages } from "gwanli-core";
+import { indexNotionPages, listFiles } from "gwanli-core";
 import { exec } from "child_process";
 
 const program = new Command("gwanli");
@@ -15,15 +15,9 @@ program
   .command("index")
   .description("Index pages from your Notion workspace")
   .option("-t, --token <token>", "Notion integration token")
-  .option("-d, --db <dbPath>", "Path to the SQLite database file")
-  .option(
-    "--assets-index <path>",
-    "Path to write the assets index JSON (defaults next to DB as assets-index.json)"
-  )
   .action(async (options) => {
     const token = options.token || process.env.NOTION_API_KEY;
-    const dbPath = options.db || "./notion.db";
-    const assetsIndexPath = options.assetsIndex;
+    const dbPath = "~/gwanli/notion.db";
 
     if (!token) {
       console.error(
@@ -32,7 +26,27 @@ program
       process.exit(1);
     }
 
-    await indexNotionPages(token, dbPath, assetsIndexPath);
+    await indexNotionPages(token, dbPath);
+  });
+
+program
+  .command("ls")
+  .description("List all files in the Notion workspace in a tree structure")
+  .option("-t, --token <token>", "Notion integration token (optional)")
+  .option("-p, --prefix <prefix>", "Filter files by prefix/slug")
+  .option("--max-depth <depth>", "Maximum depth to display (default: 2)", "2")
+  .action(async (options) => {
+    const dbPath = "~/gwanli/notion.db";
+    const prefix = options.prefix || "/";
+    const maxDepth = parseInt(options.maxDepth);
+
+    try {
+      const tree = listFiles(dbPath, prefix, maxDepth);
+      console.log(tree);
+    } catch (error: any) {
+      console.error("Error listing files:", error.message);
+      process.exit(1);
+    }
   });
 
 program

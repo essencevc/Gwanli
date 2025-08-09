@@ -1,11 +1,15 @@
 import { Client } from "@notionhq/client";
 import pLimit from "p-limit";
-import { dirname, join } from "path";
+import treeify from "treeify";
+import Database from "better-sqlite3";
+import { join } from "path";
+import { homedir } from "os";
 import {
   initialise_db,
   insertPages,
   insertDatabases,
   insertDatabasePages,
+  getAllSlugs,
 } from "./lib/db.js";
 import {
   convertDatabasePageToMarkdown,
@@ -14,28 +18,20 @@ import {
   fetchAllPages,
   generateSlugs,
 } from "./lib/notion.js";
+import { buildTree, extractSlugPrefix } from "./lib/tree.js";
 
 export async function indexNotionPages(notionToken: string, db_path: string) {
   const notion = new Client({ auth: notionToken });
   const db = initialise_db(db_path);
 
-  // Assets directory next to the DB
-  const assetsDir = join(dirname(db_path), "assets");
-
   // Rate limit to 2 concurrent requests for Notion API
   const limit = pLimit(2);
-
-  console.log(`Database initialized at ${db_path}`);
-
   // 1. Fetch all pages
   const { databaseChildren, regularPages } = await fetchAllPages(notion);
   const databases = await fetchAllDatabases(notion);
 
   // 2. Slugify the pages
   const id_to_slug = generateSlugs(regularPages, databases);
-
-  // 3. Convert regular pages to markdown
-  console.log(`Converting ${regularPages.length} pages to markdown...`);
   const conversionPromises = regularPages.map((page) =>
     limit(() => convertPageToMarkdown(notion, page, id_to_slug))
   );
@@ -44,7 +40,6 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
 
   // 4. Insert databases
   insertDatabases(db, databases, id_to_slug);
-  console.log(`Inserted ${databases.length} databases into database`);
 
   const conversionDatabasePromises = databaseChildren.map((child) =>
     limit(() => convertDatabasePageToMarkdown(notion, child, id_to_slug))
@@ -55,9 +50,43 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
   insertPages(db, convertedPages);
 
   insertDatabasePages(db, convertedDatabasePages);
-  console.log(
-    `Inserted ${databaseChildren.length} database pages into database`
-  );
+}
+
+export function listFiles(
+  db_path: string,
+  prefix: string = "/",
+  maxDepth: number = 2
+): string {
+  let slugs = [];
+
+  try {
+    // Expand ~ to home directory for consistent path handling
+    const expandedPath = db_path.startsWith("~/")
+      ? join(homedir(), db_path.slice(2))
+      : db_path;
+    const db = new Database(expandedPath);
+    slugs = getAllSlugs(db);
+  } catch (error) {
+    console.error("Error fetching slugs:", error);
+    throw error;
+  }
+
+  const { processedPrefix, shortenedPrefix } = extractSlugPrefix(prefix);
+
+  const filteredSlugs = slugs
+    .filter((slug) => slug && slug.startsWith(processedPrefix))
+    .map((slug) => slug.replace(processedPrefix, shortenedPrefix))
+    .sort((a, b) => a.length - b.length);
+
+  const tree = buildTree(filteredSlugs, maxDepth);
+  const formattedTree = treeify.asTree(tree, true, true);
+
+  return `
+  Showing files from ${prefix} with max depth ${maxDepth}
+  - ++ indicates there are more pages/databases to explore from this path.
+
+  ${formattedTree}
+  `;
 }
 
 // Export shared types

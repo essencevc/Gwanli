@@ -33,11 +33,13 @@
     "better-sqlite3": "^11.5.0",
     "notion-to-md": "^3.1.9",
     "p-limit": "^6.2.0",
+    "treeify": "^1.1.0",
     "zod": "^3.25.64"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.0.0",
+    "@types/treeify": "^1.0.3",
     "typescript": "^5.0.0",
     "vitest": "^2.1.0"
   },
