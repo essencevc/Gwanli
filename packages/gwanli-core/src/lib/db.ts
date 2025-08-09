@@ -150,3 +150,26 @@ export function insertDatabasePages(
     throw error;
   }
 }
+
+export function getAllSlugs(db: Database.Database): string[] {
+  try {
+    // Get slugs from page table
+    const pageStmt = db.prepare("SELECT slug FROM page");
+    const pageSlugs = pageStmt.all() as { slug: string }[];
+
+    // Get slugs from database table
+    const databaseStmt = db.prepare("SELECT slug FROM database");
+    const databaseSlugs = databaseStmt.all() as { slug: string }[];
+
+    // Combine and extract slug strings
+    const allSlugs = [
+      ...pageSlugs.map(row => row.slug),
+      ...databaseSlugs.map(row => row.slug)
+    ];
+
+    return allSlugs;
+  } catch (error) {
+    console.error("Error fetching slugs:", error);
+    throw error;
+  }
+}

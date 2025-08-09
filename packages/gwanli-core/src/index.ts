@@ -1,11 +1,14 @@
 import { Client } from "@notionhq/client";
 import pLimit from "p-limit";
 import { dirname, join } from "path";
+import treeify from "treeify";
+import Database from "better-sqlite3";
 import {
   initialise_db,
   insertPages,
   insertDatabases,
   insertDatabasePages,
+  getAllSlugs,
 } from "./lib/db.js";
 import {
   convertDatabasePageToMarkdown,
@@ -58,6 +61,44 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
   console.log(
     `Inserted ${databaseChildren.length} database pages into database`
   );
+}
+
+export function listFiles(db_path: string): string {
+  const db = new Database(db_path);
+  
+  try {
+    const slugs = getAllSlugs(db);
+    
+    // Convert slug paths to nested object structure
+    const tree: any = {};
+    
+    for (const slug of slugs) {
+      if (!slug) continue;
+      
+      const parts = slug.split('/').filter(part => part.length > 0);
+      let current = tree;
+      
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        
+        if (i === parts.length - 1) {
+          // Last part, set to null
+          current[part] = null;
+        } else {
+          // Intermediate part, create object if doesn't exist
+          if (!current[part]) {
+            current[part] = {};
+          }
+          current = current[part];
+        }
+      }
+    }
+    
+    // Use treeify to visualize the structure
+    return treeify.asTree(tree, true, true);
+  } finally {
+    db.close();
+  }
 }
 
 // Export shared types

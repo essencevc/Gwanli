@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { indexNotionPages } from "gwanli-core";
+import { indexNotionPages, listFiles } from "gwanli-core";
 import { exec } from "child_process";
 
 const program = new Command("gwanli");
@@ -32,7 +32,24 @@ program
       process.exit(1);
     }
 
-    await indexNotionPages(token, dbPath, assetsIndexPath);
+    await indexNotionPages(token, dbPath);
+  });
+
+program
+  .command("ls")
+  .description("List all files in the Notion workspace in a tree structure")
+  .option("-t, --token <token>", "Notion integration token (optional)")
+  .option("-d, --db <dbPath>", "Path to the SQLite database file")
+  .action(async (options) => {
+    const dbPath = options.db || "./notion.db";
+
+    try {
+      const tree = listFiles(dbPath);
+      console.log(tree);
+    } catch (error: any) {
+      console.error("Error listing files:", error.message);
+      process.exit(1);
+    }
   });
 
 program
