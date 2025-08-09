@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS page (
 -- Database pages table
 CREATE TABLE IF NOT EXISTS database_page (
   id TEXT PRIMARY KEY,
-  title TEXT,
   properties JSON NOT NULL,
+  content TEXT NOT NULL,
   createdAt TEXT NOT NULL,
   lastUpdated TEXT NOT NULL
 );

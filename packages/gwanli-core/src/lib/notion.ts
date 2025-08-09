@@ -125,7 +125,7 @@ export async function fetchAllDatabases(notion: Client) {
   return allDatabases;
 }
 
-export function extract_properties(
+export function processProperties(
   properties: Record<string, any>
 ): Record<string, string> {
   const extracted: Record<string, string> = {};
@@ -223,9 +223,9 @@ function getParentId(
 export function generateSlugs(
   pages: PageObjectResponse[],
   databases: DatabaseObjectResponse[]
-): Record<string, string> {
+): Record<string, { slug: string; name: string }> {
   const items = [...pages, ...databases];
-  const slugMap: Record<string, string> = {};
+  const slugMap: Record<string, { slug: string; name: string }> = {};
   const usedSlugs = new Set<string>();
 
   function processItems(
@@ -253,7 +253,10 @@ export function generateSlugs(
       }
 
       const fullSlug = parentSlug + "/" + finalSlug;
-      slugMap[item.id] = fullSlug;
+      slugMap[item.id] = {
+        slug: fullSlug,
+        name: title,
+      };
       usedSlugs.add(fullSlug);
 
       // Recursively process children of this item
@@ -269,19 +272,44 @@ export function generateSlugs(
 
 export interface ConvertedPage {
   id: string;
-  markdown: string;
+  content: string;
   slug: string;
   createdAt: string;
   lastUpdated: string;
   title: string;
 }
 
-export async function convertPageToMarkdown(
+// Database schema types
+export interface PageRecord {
+  id: string;
+  title: string;
+  content: string;
+  slug: string;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+export interface DatabasePageRecord {
+  id: string;
+  properties: Record<string, string>;
+  content: string;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+export interface DatabaseRecord {
+  id: string;
+  title: string;
+  slug: string;
+  properties: Record<string, any>;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+function initializeMarkdownConverter(
   notion: Client,
-  page: PageObjectResponse,
-  id_to_slug: Record<string, string>
-): Promise<ConvertedPage> {
-  // Initialize notion-to-markdown with config to disable child page parsing
+  id_to_slug: Record<string, { slug: string; name: string }>
+): NotionToMarkdown {
   const n2m = new NotionToMarkdown({
     notionClient: notion,
   });
@@ -308,7 +336,7 @@ export async function convertPageToMarkdown(
         return {
           id: item.id,
           //@ts-ignore
-          properties: extract_properties(item.properties),
+          properties: processProperties(item.properties),
         };
       });
 
@@ -327,28 +355,102 @@ export async function convertPageToMarkdown(
     }
   });
 
+  // Custom transformer for child_page blocks
   n2m.setCustomTransformer("child_page", async (block) => {
-    //@ts-ignore
-    return `[${block.child_page?.title || "Untitled Page"}](${
-      id_to_slug[block.id]
-    })`;
+    const childPageBlock = block as any;
+    const childPageId = block.id;
+    const childPageTitle = childPageBlock.child_page?.title || "Untitled Page";
+
+    if (id_to_slug[childPageId]) {
+      return `[${childPageTitle}](${id_to_slug[childPageId].slug})`;
+    }
+    return `[${childPageTitle}](notion://page/${childPageId})`;
   });
+
+  // Custom transformer for link_to_page blocks
+  n2m.setCustomTransformer("link_to_page", async (block) => {
+    const linkToPage = block as any;
+    const pageId = linkToPage.link_to_page?.page_id;
+
+    if (pageId && id_to_slug[pageId]) {
+      return `[${id_to_slug[pageId].name}](${id_to_slug[pageId].slug})`;
+    }
+    return false; // Return false for default behavior
+  });
+
+  return n2m;
+}
+
+function processNotionLinks(
+  markdownContent: string,
+  id_to_slug: Record<string, { slug: string; name: string }>
+): string {
+  return markdownContent.replace(
+    /\[([^\]]*)\]\(https:\/\/www\.notion\.so\/[^\/]*\/([a-f0-9]{32})[^\)]*\)/g,
+    (match: string, linkText: string, pageId: string) => {
+      if (id_to_slug[pageId]) {
+        return `[${linkText}](${id_to_slug[pageId].slug})`;
+      }
+      return match; // Return original if no mapping found
+    }
+  );
+}
+
+export async function convertPageToMarkdown(
+  notion: Client,
+  page: PageObjectResponse,
+  id_to_slug: Record<string, { slug: string; name: string }>
+): Promise<PageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
   const mdBlocks = await n2m.pageToMarkdown(page.id);
 
+  // Extract title from regular page
   // @ts-ignore
-  const title = page.properties.title.title[0].plain_text;
+  const title = page.properties.title?.title?.[0]?.plain_text || "untitled";
 
-  // Build a simple markdown string that includes child_page links
-  const markdownContent = mdBlocks
-    .map((block) => block.parent) // parent already contains your custom markdown
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
     .filter(Boolean)
     .join("\n\n");
 
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
+
   return {
     id: page.id,
-    markdown: `${title}\n\n${markdownContent}`,
     title,
-    slug: id_to_slug[page.id],
+    content: `${title}\n\n${markdownContent}`,
+    slug: id_to_slug[page.id].slug,
+    createdAt: page.created_time,
+    lastUpdated: page.last_edited_time,
+  };
+}
+
+export async function convertDatabasePageToMarkdown(
+  notion: Client,
+  page: PageObjectResponse,
+  id_to_slug: Record<string, { slug: string; name: string }>
+): Promise<DatabasePageRecord> {
+  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
+
+  // Process properties for database page
+  const properties = processProperties(page.properties);
+
+  // Build markdown content
+  let markdownContent = mdBlocks
+    .map((block) => block.parent)
+    .filter(Boolean)
+    .join("\n\n");
+
+  // Process notion.so links
+  markdownContent = processNotionLinks(markdownContent, id_to_slug);
+
+  return {
+    id: page.id,
+    properties,
+    content: markdownContent,
     createdAt: page.created_time,
     lastUpdated: page.last_edited_time,
   };

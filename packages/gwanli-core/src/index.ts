@@ -1,7 +1,13 @@
 import { Client } from "@notionhq/client";
 import pLimit from "p-limit";
-import { initialise_db, insertPage, insertPages } from "./lib/db.js";
 import {
+  initialise_db,
+  insertPages,
+  insertDatabases,
+  insertDatabasePages,
+} from "./lib/db.js";
+import {
+  convertDatabasePageToMarkdown,
   convertPageToMarkdown,
   fetchAllDatabases,
   fetchAllPages,
@@ -33,4 +39,20 @@ export async function indexNotionPages(notionToken: string, db_path: string) {
   const convertedPages = await Promise.all(conversionPromises);
   insertPages(db, convertedPages);
   console.log(`Inserted ${convertedPages.length} pages into database`);
+
+  // 4. Insert databases
+  insertDatabases(db, databases, id_to_slug);
+  console.log(`Inserted ${databases.length} databases into database`);
+
+  const conversionDatabasePromises = databaseChildren.map((child) =>
+    limit(() => convertDatabasePageToMarkdown(notion, child, id_to_slug))
+  );
+
+  const convertedDatabasePages = await Promise.all(conversionDatabasePromises);
+
+  // TODO: Handle database pages
+  insertDatabasePages(db, convertedDatabasePages);
+  console.log(
+    `Inserted ${databaseChildren.length} database pages into database`
+  );
 }
