@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS page (
 CREATE TABLE IF NOT EXISTS database_page (
   id TEXT PRIMARY KEY,
   title TEXT,
-  content TEXT NOT NULL,
   properties JSON NOT NULL,
   createdAt TEXT NOT NULL,
   lastUpdated TEXT NOT NULL
