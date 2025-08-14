@@ -90,8 +90,14 @@ export function listFiles(
 }
 
 // Export config functions
-export { loadConfig, checkWorkspace, addWorkspace } from "./config/loader.js";
+export { loadConfig, checkWorkspace, addWorkspace, updateWorkspace, deleteWorkspace } from "./config/loader.js";
 export type { GwanliConfig, WorkspaceConfig } from "./config/types.js";
+
+// Export constants
+export { OAUTH_BASE_URL } from "./constants.js";
+
+// Export logging utilities
+export { Logger } from "./logging/index.js";
 
 // Export shared types
 export type {
@@ -101,3 +107,4 @@ export type {
   ConvertedPage,
 } from "./types/database.js";
 export type { SlugMapping, IdToSlugMap } from "./types/notion.js";
+export type { IndexJob, JobStatus } from "./types/index.js";
