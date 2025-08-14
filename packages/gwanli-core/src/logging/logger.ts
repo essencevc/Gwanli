@@ -1,8 +1,9 @@
 import pino from 'pino';
 import type { Logger as PinoLogger } from 'pino';
 import { mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import { detectRuntime, Runtime } from './runtime.js';
+import { GWANLI_HOME } from '../constants.js';
 
 /**
  * Simple Logger that mimics console but handles CLI vs MCP context
@@ -14,10 +15,11 @@ export class Logger {
   /**
    * Initialize Pino logger
    */
-  private static initPino(): PinoLogger {
+  private static initPino(logDir?: string, prefix?: string): PinoLogger {
     if (this.pino) return this.pino;
     
-    const logPath = process.env.GWANLI_LOG_PATH || `${process.env.HOME}/.gwanli/logs/app.log`;
+    const defaultLogPath = join(GWANLI_HOME, 'logs', 'app.log');
+    const logPath = logDir ? join(logDir, 'app.log') : defaultLogPath;
     
     // Create directory if it doesn't exist
     try {
@@ -28,6 +30,12 @@ export class Logger {
     
     this.pino = pino({
       level: 'debug',
+      formatters: prefix ? {
+        log: (object) => ({
+          ...object,
+          msg: `${prefix} ${object.msg || ''}`.trim()
+        })
+      } : undefined,
       transport: {
         target: 'pino/file',
         options: {

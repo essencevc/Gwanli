@@ -1,8 +1,4 @@
 import { z } from "zod";
-import { join } from "path";
-import { homedir } from "os";
-
-export const GWANLI_DIR = join(homedir(), "gwanli");
 
 export const WorkspaceConfigSchema = z.object({
   name: z.string().min(1, "Workspace name is required"),
