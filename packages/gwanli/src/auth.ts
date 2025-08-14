@@ -2,7 +2,7 @@ import { Command } from "commander";
 import open from "open";
 import { createInterface } from "readline";
 import { startAuthServer } from "./auth-server.js";
-import { checkWorkspace, addWorkspace, Logger } from "gwanli-core";
+import { checkWorkspace, addWorkspace, Logger, OAUTH_BASE_URL } from "gwanli-core";
 
 async function promptUser(question: string): Promise<string> {
   const rl = createInterface({
@@ -27,9 +27,8 @@ async function runAuthFlow(workspace: string): Promise<void> {
   Logger.log(`Started Auth Process on ${url}`);
 
   // Build OAuth URL and open browser
-  const workerUrl = "http://localhost:8787";
   const callbackUrl = `${url}/callback`;
-  const authUrl = `${workerUrl}/cli?callback=${encodeURIComponent(
+  const authUrl = `${OAUTH_BASE_URL}/cli?callback=${encodeURIComponent(
     callbackUrl
   )}`;
 
