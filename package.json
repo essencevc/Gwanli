@@ -24,6 +24,6 @@
   "dependencies": {
     "better-sqlite3": "^12.2.0",
     "markdown-table": "^3.0.4",
-    "smol-toml": "^1.4.1"
+    "smol-toml": "^1.4.2"
   }
 }
