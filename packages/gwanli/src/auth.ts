@@ -1,6 +1,22 @@
 import { Command } from "commander";
 import open from "open";
+import { createInterface } from "readline";
 import { startAuthServer } from "./auth-server.js";
+import { checkWorkspace, addWorkspace } from "gwanli-core";
+
+async function promptUser(question: string): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
 
 async function runAuthFlow(workspace: string): Promise<void> {
   console.log(`\nSetting up workspace: ${workspace}`);
@@ -24,12 +40,35 @@ async function runAuthFlow(workspace: string): Promise<void> {
 
   // Success
   console.log("\nAuthentication successful!");
-  console.log(`Workspace '${workspace}' will be created with this token`);
   console.log(`Token: ${token.substring(0, 10)}...`);
 
-  // TODO: Add workspace to config here
-  console.log("\nWorkspace configuration not yet implemented");
-  console.log("Manual step: Save this token for the workspace");
+  // Check if workspace already exists
+  const workspaceExists = checkWorkspace(workspace);
+  
+  if (workspaceExists) {
+    console.log(`\nWorkspace '${workspace}' already exists.`);
+    const shouldOverride = await promptUser("Do you want to override it? (y/n): ");
+    
+    if (shouldOverride !== 'y' && shouldOverride !== 'yes') {
+      console.log("Operation cancelled. Workspace not updated.");
+      return;
+    }
+  }
+
+  // Add workspace to config
+  try {
+    addWorkspace(workspace, token);
+    console.log(`\n✓ Workspace '${workspace}' has been ${workspaceExists ? 'updated' : 'created'} successfully!`);
+    console.log("You can now use this workspace with gwanli commands.");
+    
+    // Force exit after a short delay to ensure all async operations complete
+    setTimeout(() => {
+      process.exit(0);
+    }, 500);
+  } catch (error) {
+    console.error(`Failed to save workspace configuration: ${error}`);
+    throw error;
+  }
 }
 
 function printHeader(title: string): void {

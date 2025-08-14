@@ -37,13 +37,27 @@ npx gwanli --help
 
 ## Setup
 
-### 1. Get Your Notion API Key
+### 1. Authenticate with Notion
 
-Visit [Our deployed worker](https://worker.ivanleomk9297.workers.dev) to get your NOTION_API_KEY. If you'd like to know how the worker works, just check out [our source code here](./worker/index.ts)
+Run the auth command to automatically get your API token and set up your first workspace:
 
-### 2. Start Using the MCP Server
+```bash
+# Set up default workspace
+npx gwanli auth
 
-You can now use the MCP server directly with your API key.
+# Or set up a named workspace
+npx gwanli auth --workspace myproject
+```
+
+This will:
+- Open your browser for Notion authentication
+- Automatically receive your API token  
+- Set up your workspace configuration
+- No manual copying required!
+
+### 2. Start Using Gwanli
+
+You can now use all Gwanli commands with your authenticated workspace.
 
 ## Quick Start
 
@@ -163,7 +177,7 @@ npx gwanli-mcp
 
 ### Claude Desktop Integration
 
-Add to your Claude Desktop MCP configuration:
+After running `gwanli auth`, add to your Claude Desktop MCP configuration:
 
 ```json
 {
@@ -172,12 +186,14 @@ Add to your Claude Desktop MCP configuration:
       "command": "npx",
       "args": ["gwanli-mcp"],
       "env": {
-        "NOTION_TOKEN": "secret_your_integration_token_here"
+        "NOTION_TOKEN": "your_token_from_gwanli_auth"
       }
     }
   }
 }
 ```
+
+> **Tip**: The auth command will display your token - copy it for the MCP configuration.
 
 ### Test with MCP Inspector
 
@@ -279,10 +295,12 @@ done
 ### Environment Variables
 
 ```bash
-NOTION_TOKEN=secret_your_integration_token_here
-GWANLI_DB_PATH=/path/to/workspace.db  # Optional: custom database location
-GWANLI_CACHE_TTL=3600                 # Optional: cache TTL in seconds
+NOTION_TOKEN=secret_your_integration_token_here  # Set automatically by gwanli auth
+GWANLI_DB_PATH=/path/to/workspace.db             # Optional: custom database location  
+GWANLI_CACHE_TTL=3600                            # Optional: cache TTL in seconds
 ```
+
+> **Note**: The `gwanli auth` command handles token setup automatically. Manual environment configuration is only needed for advanced use cases.
 
 ### Configuration File
 

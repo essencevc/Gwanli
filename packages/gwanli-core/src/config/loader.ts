@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { parse, stringify } from "smol-toml";
-import { GwanliConfig, GlobalConfigSchema, GWANLI_DIR } from "./types.js";
+import { GwanliConfig, GlobalConfigSchema, GWANLI_DIR, WorkspaceConfig } from "./types.js";
 
 const CONFIG_PATH = join(GWANLI_DIR, "gwanli.toml");
 
@@ -38,4 +38,35 @@ export function loadConfig(configPath?: string): GwanliConfig {
     }
     throw error;
   }
+}
+
+export function checkWorkspace(workspaceName: string, configPath?: string): boolean {
+  const config = loadConfig(configPath);
+  return workspaceName in config.workspace;
+}
+
+export function addWorkspace(
+  workspaceName: string, 
+  apiKey: string, 
+  options?: { description?: string; dbPath?: string },
+  configPath?: string
+): void {
+  const filePath = configPath || CONFIG_PATH;
+  
+  // Create the workspace config
+  const workspaceConfig: WorkspaceConfig = {
+    name: workspaceName,
+    api_key: apiKey,
+    db_path: options?.dbPath || join(GWANLI_DIR, `${workspaceName}.db`),
+    ...(options?.description && { description: options.description })
+  };
+
+  // Load current config
+  const config = loadConfig(configPath);
+  
+  // Add the new workspace
+  config.workspace[workspaceName] = workspaceConfig;
+  
+  // Write updated config back to file
+  writeFileSync(filePath, stringify(config));
 }

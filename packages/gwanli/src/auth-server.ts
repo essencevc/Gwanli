@@ -14,11 +14,18 @@ export async function startAuthServer(): Promise<{ url: string; tokenPromise: Pr
       app.post("/callback", async (c) => {
         try {
           const { token } = await c.req.json();
-          server?.close(); // Close server immediately
+          
+          // Close server after a short delay to ensure response is sent
+          setTimeout(() => {
+            server?.close();
+          }, 100);
+          
           resolveToken(token); // Resolve with token!
           return c.json({ success: true });
         } catch (error) {
-          server?.close();
+          setTimeout(() => {
+            server?.close();
+          }, 100);
           rejectToken(new Error("Invalid callback data"));
           return c.json({ error: "Invalid JSON" }, 400);
         }
