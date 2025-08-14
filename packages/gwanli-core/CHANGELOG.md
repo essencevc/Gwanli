@@ -1,5 +1,11 @@
 # gwanli-core
 
+## 0.4.0
+
+### Minor Changes
+
+- fixed up missing imports :<
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # gwanli
 
+## 0.4.0
+
+### Minor Changes
+
+- fixed up missing imports :<
+
+### Patch Changes
+
+- Updated dependencies
+  - gwanli-core@0.4.0
+  - gwanli-mcp@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes
