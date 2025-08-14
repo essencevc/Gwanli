@@ -1,12 +1,12 @@
-import { spawn, ChildProcess } from 'child_process';
-import { execSync } from 'child_process';
+import { spawn, ChildProcess } from "child_process";
+import { execSync } from "child_process";
 
 export interface ProcessInfo {
   pid: number;
   command: string;
   args: string[];
   jobId?: string;
-  status: 'running';
+  status: "running";
 }
 
 /**
@@ -22,8 +22,10 @@ export function spawnGwanliProcess(
   jobId?: string
 ): ChildProcess {
   // Prefix task name with 'gwanli-' for identification
-  const processTitle = taskName.startsWith('gwanli-') ? taskName : `gwanli-${taskName}`;
-  
+  const processTitle = `gwanli-${taskName}-${
+    Math.floor(Math.random() * 1000) + 1
+  }`;
+
   // Serialize the function to be executed
   const functionCode = `
     // Set process title for identification
@@ -39,9 +41,9 @@ export function spawnGwanliProcess(
         process.exit(1);
       });
   `;
-  
-  const child = spawn('node', ['-e', functionCode], {
-    stdio: ['pipe', 'pipe', 'pipe'],
+
+  const child = spawn("node", ["-e", functionCode], {
+    stdio: ["pipe", "pipe", "pipe"],
     detached: false,
   });
 
@@ -55,23 +57,28 @@ export function spawnGwanliProcess(
 export function listActiveGwanliProcesses(): ProcessInfo[] {
   try {
     // Get all running processes that start with 'gwanli-'
-    const output = execSync('ps aux | grep "gwanli-" | grep -v grep', { encoding: 'utf8' });
-    const lines = output.trim().split('\n').filter(line => line.length > 0);
-    
-    const processes: ProcessInfo[] = lines.map(line => {
+    const output = execSync('ps aux | grep "gwanli-" | grep -v grep', {
+      encoding: "utf8",
+    });
+    const lines = output
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0);
+
+    const processes: ProcessInfo[] = lines.map((line) => {
       const parts = line.trim().split(/\s+/);
       const pid = parseInt(parts[1]);
-      const command = parts[10] || 'gwanli-unknown';
+      const command = parts[10] || "gwanli-unknown";
       const args = parts.slice(11) || [];
-      
+
       return {
         pid,
         command,
         args,
-        status: 'running' as const,
+        status: "running" as const,
       };
     });
-    
+
     return processes;
   } catch (error) {
     // If ps command fails, return empty array
@@ -86,7 +93,7 @@ export function listActiveGwanliProcesses(): ProcessInfo[] {
  */
 export function killGwanliProcess(pid: number): boolean {
   try {
-    process.kill(pid, 'SIGTERM');
+    process.kill(pid, "SIGTERM");
     return true;
   } catch (error) {
     return false;
@@ -99,8 +106,10 @@ export function killGwanliProcess(pid: number): boolean {
  * @returns ProcessInfo if found, null otherwise
  */
 export function getProcessByTaskName(taskName: string): ProcessInfo | null {
-  const processTitle = taskName.startsWith('gwanli-') ? taskName : `gwanli-${taskName}`;
+  const processTitle = taskName.startsWith("gwanli-")
+    ? taskName
+    : `gwanli-${taskName}`;
   const processes = listActiveGwanliProcesses();
-  
-  return processes.find(p => p.command.includes(processTitle)) || null;
+
+  return processes.find((p) => p.command.includes(processTitle)) || null;
 }

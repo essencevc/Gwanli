@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { auth } from "./auth.js";
+import { index } from "./index.js";
 
 const program = new Command("gwanli");
 
@@ -12,5 +13,8 @@ program
 
 // Add auth command
 program.addCommand(auth);
+
+// Add index command
+program.addCommand(index);
 
 program.parse();
