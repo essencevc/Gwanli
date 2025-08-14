@@ -3,10 +3,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadConfig, addWorkspace, updateWorkspace, deleteWorkspace, OAUTH_BASE_URL, checkWorkspace } from "gwanli-core";
-
-// Set MCP runtime environment
-process.env.GWANLI_RUNTIME = "MCP";
+import {
+  loadConfig,
+  addWorkspace,
+  updateWorkspace,
+  deleteWorkspace,
+  OAUTH_BASE_URL,
+  checkWorkspace,
+  indexNotionPages,
+  JobTracker,
+  listFiles,
+  getRecentJobs,
+  getJobById,
+  type JobState,
+} from "gwanli-core";
 
 // Create an MCP server
 const server = new McpServer({
@@ -20,14 +30,9 @@ server.registerTool(
   {
     description:
       "Check authentication status and get OAuth URLs for workspace setup",
-    inputSchema: {
-      workspace: z
-        .string()
-        .optional()
-        .describe("Optional workspace name to get auth URL for"),
-    },
+    inputSchema: {},
   },
-  async (args) => {
+  async () => {
     try {
       // Load current config to check existing workspaces
       const config = loadConfig();
@@ -197,7 +202,7 @@ server.registerTool(
         case "LIST":
           const config = loadConfig();
           const workspaces = Object.entries(config.workspace);
-          
+
           if (workspaces.length === 0) {
             return {
               content: [
@@ -212,7 +217,9 @@ server.registerTool(
           const workspaceList = workspaces
             .map(([name, workspace]) => {
               const defaultLabel = name === "default" ? " (default)" : "";
-              const description = workspace.description ? ` - ${workspace.description}` : "";
+              const description = workspace.description
+                ? ` - ${workspace.description}`
+                : "";
               return `- **${name}**${defaultLabel}${description}`;
             })
             .join("\n");
@@ -270,7 +277,7 @@ server.registerTool(
   async (args) => {
     try {
       const workspaceName = args.workspace || "default";
-      
+
       // Check if workspace exists
       if (!checkWorkspace(workspaceName)) {
         return {
@@ -284,18 +291,33 @@ server.registerTool(
         };
       }
 
-      // Spawn the CLI indexing command
-      const { spawn } = await import("child_process");
-      spawn('gwanli', ['index', '-w', workspaceName], { 
-        detached: true,
-        stdio: 'ignore'
-      });
+      // Run indexing directly in background
+      const config = loadConfig();
+      const workspace = config.workspace[workspaceName];
+
+      // Create job tracker
+      const jobId = `mcp-${Date.now()}`;
+      const jobTracker = new JobTracker(jobId);
+
+      // Start indexing asynchronously
+      indexNotionPages(workspace.api_key, workspace.db_path, jobTracker)
+        .then(() => {
+          jobTracker.updateStatus("END");
+          console.log(`Indexing completed for workspace: ${workspaceName}`);
+        })
+        .catch((error) => {
+          jobTracker.updateStatus("ERROR");
+          console.error(
+            `Indexing failed for workspace ${workspaceName}:`,
+            error
+          );
+        });
 
       return {
         content: [
           {
             type: "text",
-            text: "Indexing of Notion workspace has begun. Check back in a while to see its progress",
+            text: `Indexing of Notion workspace has begun.\n\n**Job ID:** ${jobId}\n\nCheck back in a while to see its progress using the checkJob tool.`,
           },
         ],
       };
@@ -305,6 +327,172 @@ server.registerTool(
           {
             type: "text",
             text: `Error starting indexing: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register ls tool
+server.registerTool(
+  "ls",
+  {
+    description: "List files from a workspace or database path",
+    inputSchema: {
+      workspace: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace name or database path - defaults to default_search from config if not provided"
+        ),
+      prefix: z
+        .string()
+        .default("/")
+        .describe("Path prefix to filter results - defaults to '/'"),
+      depth: z
+        .number()
+        .default(2)
+        .describe("Maximum depth to display - defaults to 2"),
+    },
+  },
+  async (args) => {
+    try {
+      const config = loadConfig();
+
+      if (!config.default_search) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No default search configured",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const searchWorkspace = args.workspace ?? config.default_search;
+      const prefix = args.prefix ?? "/";
+      const maxDepth = args.depth ?? 2;
+
+      const result = listFiles(searchWorkspace, prefix, maxDepth);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `**Files from: ${searchWorkspace}**\nPrefix: ${prefix}, Max Depth: ${maxDepth}\n\n${result}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error listing files: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register checkJob tool
+server.registerTool(
+  "checkJob",
+  {
+    description: "Check job status - either by specific ID or get recent jobs",
+    inputSchema: {
+      id: z
+        .string()
+        .optional()
+        .describe("Specific job ID to check (e.g., 'mcp-1755172514281')"),
+      count: z
+        .number()
+        .default(5)
+        .describe("Number of recent jobs to show when no ID is provided - defaults to 5"),
+      prefix: z
+        .enum(["mcp", "cli"])
+        .default("mcp")
+        .describe("Job prefix filter - defaults to 'mcp'"),
+    },
+  },
+  async (args) => {
+    try {
+      if (args.id) {
+        // Get specific job by ID
+        const job = getJobById(args.id);
+        
+        if (!job) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Job "${args.id}" not found.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const stateText = job.state 
+          ? `**Status:** \`\`\`json\n${JSON.stringify(job.state, null, 2)}\n\`\`\``
+          : "**Status:** No status file found";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `**Job ID:** ${job.jobId}\n**Prefix:** ${job.prefix}\n**Timestamp:** ${job.timestamp}\n\n${stateText}`,
+            },
+          ],
+        };
+      } else {
+        // Get recent jobs
+        const jobs = getRecentJobs(args.count, args.prefix);
+        
+        if (jobs.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `No ${args.prefix} jobs found.`,
+              },
+            ],
+          };
+        }
+
+        const jobsList = jobs
+          .map((job: JobState) => {
+            const statusText = job.state?.status ? ` (${job.state.status})` : "";
+            const timeStr = new Date(job.timestamp).toLocaleString();
+            return `- **${job.jobId}**${statusText} - ${timeStr}`;
+          })
+          .join("\n");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `**Recent ${args.prefix.toUpperCase()} Jobs (${jobs.length}):**\n\n${jobsList}\n\nUse checkJob with a specific ID to see detailed status.`,
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error checking job: ${
               error instanceof Error ? error.message : String(error)
             }`,
           },

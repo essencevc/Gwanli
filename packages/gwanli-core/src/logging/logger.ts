@@ -2,22 +2,25 @@ import pino from "pino";
 import type { Logger as PinoLogger } from "pino";
 import { mkdirSync } from "fs";
 import { dirname, join } from "path";
-import { detectRuntime, Runtime } from "./runtime.js";
 import { GWANLI_HOME } from "../constants.js";
 
 /**
  * Simple Logger that mimics console but handles CLI vs MCP context
  */
 export class Logger {
-  private static pino: PinoLogger | null = null;
-  private static runtime = detectRuntime();
+  private pino: PinoLogger;
+  private enableConsole: boolean;
+
+  constructor(logDir?: string, prefix?: string, enableConsole: boolean = false) {
+    this.enableConsole = enableConsole;
+    this.pino = this.initPino(logDir, prefix);
+    this.pino.debug(`Logger initialized with console output: ${this.enableConsole}`);
+  }
 
   /**
    * Initialize Pino logger
    */
-  static initPino(logDir?: string, prefix?: string): PinoLogger {
-    if (this.pino) return this.pino;
-
+  private initPino(logDir?: string, prefix?: string): PinoLogger {
     const defaultLogPath = join(GWANLI_HOME, "logs", "app.log");
     const logPath = logDir ? join(logDir, "app.log") : defaultLogPath;
 
@@ -28,7 +31,7 @@ export class Logger {
       // Ignore error if directory already exists
     }
 
-    this.pino = pino({
+    return pino({
       level: "debug",
       formatters: prefix
         ? {
@@ -39,69 +42,75 @@ export class Logger {
           }
         : undefined,
       transport: {
-        target: "pino/file",
+        target: "pino-pretty",
         options: {
           destination: logPath,
+          colorize: false,
+          translateTime: "yyyy-mm-dd HH:MM:ss",
+          ignore: "pid,hostname",
         },
       },
     });
-
-    return this.pino;
   }
 
   /**
    * Console output only - no Pino logging (for UI/interactive messages)
    */
-  static console(message?: any, ...optionalParams: any[]): void {
-    if (this.runtime === Runtime.CLI) {
+  console(message?: any, ...optionalParams: any[]): void {
+    if (this.enableConsole) {
       console.log(message, ...optionalParams);
-    } else {
-      // MCP mode: use console.error to avoid stdio conflicts
-      console.error(message, ...optionalParams);
     }
   }
 
   /**
    * Log info message - both console and Pino (for meaningful logs)
    */
-  static log(message?: any, ...optionalParams: any[]): void {
-    // Console output
-    this.console(message, ...optionalParams);
+  log(message?: any, ...optionalParams: any[]): void {
+    // Console output only when enabled
+    if (this.enableConsole) {
+      this.console(message, ...optionalParams);
+    }
 
     // Pino logging
-    this.initPino().info(message, ...optionalParams);
+    this.pino.info(message, ...optionalParams);
   }
 
   /**
    * Log error message (like console.error)
    */
-  static error(message?: any, ...optionalParams: any[]): void {
-    // Console output (always stderr)
-    console.error(message, ...optionalParams);
+  error(message?: any, ...optionalParams: any[]): void {
+    // Console output only when enabled
+    if (this.enableConsole) {
+      console.error(message, ...optionalParams);
+    }
 
     // Pino logging
-    this.initPino().error(message, ...optionalParams);
+    this.pino.error(message, ...optionalParams);
   }
 
   /**
    * Alias for log (like console.info)
    */
-  static info(message?: any, ...optionalParams: any[]): void {
+  info(message?: any, ...optionalParams: any[]): void {
     this.log(message, ...optionalParams);
   }
 
   /**
    * Debug logging
    */
-  static debug(message?: any, ...optionalParams: any[]): void {
+  debug(message?: any, ...optionalParams: any[]): void {
     // Console output
-    if (this.runtime === Runtime.CLI) {
+    if (this.enableConsole) {
       console.log("[DEBUG]", message, ...optionalParams);
-    } else {
-      console.error("[DEBUG]", message, ...optionalParams);
     }
 
     // Pino logging
-    this.initPino().debug(message, ...optionalParams);
+    this.pino.debug(message, ...optionalParams);
   }
 }
+
+// Default logger instance for convenience (console disabled by default)
+export const defaultLogger = new Logger();
+
+// CLI logger instance with console output enabled
+export const cliLogger = new Logger(undefined, undefined, true);

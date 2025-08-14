@@ -10,6 +10,7 @@ export const WorkspaceConfigSchema = z.object({
 export const GlobalConfigSchema = z.object({
   api_rate_limit: z.number().int().positive().default(2),
   max_depth: z.number().int().positive().default(2),
+  default_search: z.string().optional(),
   workspace: z.record(z.string(), WorkspaceConfigSchema).default({}),
 });
 

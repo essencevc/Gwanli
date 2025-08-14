@@ -1,2 +1,1 @@
-export { Logger } from './logger.js';
-export { Runtime, detectRuntime } from './runtime.js';
+export { Logger, defaultLogger, cliLogger } from './logger.js';
