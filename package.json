@@ -11,6 +11,7 @@
     "build:cli": "cd packages/gwanli && bun run build",
     "build:mcp": "cd packages/gwanli-mcp && bun run build",
     "cli": "bun run build:core && bun run build:cli && node packages/gwanli/dist/cli.js",
+    "mcp": "bun run build && cd packages/gwanli-mcp && bun run preview",
     "dev": "bun run build --watch",
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "test": "bun test"

@@ -27,8 +27,8 @@ export function buildTree(slugs: string[], maxDepth: number): Tree {
     let currentTree = tree;
 
     for (const part of parts) {
-      if (currDepth >= maxDepth) {
-        currentTree[part] = "...";
+      if (currDepth > maxDepth) {
+        currentTree[part] = "++";
         break;
       }
 

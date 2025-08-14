@@ -1,8 +1,7 @@
 import { Command } from "commander";
 import open from "open";
 import { createInterface } from "readline";
-import { startAuthServer } from "./auth-server.js";
-import { checkWorkspace, addWorkspace, Logger, OAUTH_BASE_URL } from "gwanli-core";
+import { checkWorkspace, addWorkspace, cliLogger, OAUTH_BASE_URL } from "gwanli-core";
 
 async function promptUser(question: string): Promise<string> {
   const rl = createInterface({
@@ -13,47 +12,39 @@ async function promptUser(question: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
-      resolve(answer.trim().toLowerCase());
+      resolve(answer.trim());
     });
   });
 }
 
 async function runAuthFlow(workspace: string): Promise<void> {
-  Logger.console(`\nSetting up workspace: ${workspace}`);
-  Logger.console("Starting local server for OAuth callback...");
-
-  // Start local auth server
-  const { url, tokenPromise } = await startAuthServer();
-  Logger.log(`Started Auth Process on ${url}`);
+  cliLogger.console(`\nSetting up workspace: ${workspace}`);
 
   // Build OAuth URL and open browser
-  const callbackUrl = `${url}/callback`;
-  const authUrl = `${OAUTH_BASE_URL}/cli?callback=${encodeURIComponent(
-    callbackUrl
-  )}`;
+  const authUrl = `${OAUTH_BASE_URL}`;
 
-  Logger.console("\nOpening browser for authentication...");
+  cliLogger.console("\nOpening browser for authentication...");
   await open(authUrl);
-  Logger.console("Waiting for authentication completion...");
+  cliLogger.console("Please complete authentication in your browser and copy the token.");
 
-  // Wait for token from callback - server auto-closes when done
-  const token = await tokenPromise;
+  // Ask user to paste token
+  const token = await promptUser("Paste your Notion API token here: ");
 
   // Success
-  Logger.console("\nAuthentication successful!");
-  Logger.console(`Token: ${token.substring(0, 10)}...`);
+  cliLogger.console("\nAuthentication successful!");
+  cliLogger.console(`Token: ${token.substring(0, 10)}...`);
 
   // Check if workspace already exists
   const workspaceExists = checkWorkspace(workspace);
 
   if (workspaceExists) {
-    Logger.console(`\nWorkspace '${workspace}' already exists.`);
+    cliLogger.console(`\nWorkspace '${workspace}' already exists.`);
     const shouldOverride = await promptUser(
       "Do you want to override it? (y/n): "
     );
 
-    if (shouldOverride !== "y" && shouldOverride !== "yes") {
-      Logger.console("Operation cancelled. Workspace not updated.");
+    if (shouldOverride.toLowerCase() !== "y" && shouldOverride.toLowerCase() !== "yes") {
+      cliLogger.console("Operation cancelled. Workspace not updated.");
       return;
     }
   }
@@ -61,30 +52,30 @@ async function runAuthFlow(workspace: string): Promise<void> {
   // Add workspace to config
   try {
     addWorkspace(workspace, token);
-    Logger.console(
+    cliLogger.console(
       `\n✓ Workspace '${workspace}' has been ${
         workspaceExists ? "updated" : "created"
       } successfully!`
     );
-    Logger.console("You can now use this workspace with gwanli commands.");
+    cliLogger.console("You can now use this workspace with gwanli commands.");
 
     // Force exit after a short delay to ensure all async operations complete
     setTimeout(() => {
       process.exit(0);
     }, 500);
   } catch (error) {
-    Logger.error(`Failed to save workspace configuration: ${error}`);
+    cliLogger.error(`Failed to save workspace configuration: ${error}`);
     throw error;
   }
 }
 
 function printHeader(title: string): void {
-  Logger.console(`\n${title}`);
-  Logger.console("=".repeat(70));
+  cliLogger.console(`\n${title}`);
+  cliLogger.console("=".repeat(70));
 }
 
 function printFooter(): void {
-  Logger.console("=".repeat(70));
+  cliLogger.console("=".repeat(70));
 }
 
 export const auth = new Command("auth")
@@ -101,7 +92,7 @@ export const auth = new Command("auth")
     try {
       await runAuthFlow(workspace);
     } catch (error) {
-      Logger.error(`\nAuthentication failed: ${error}`);
+      cliLogger.error(`\nAuthentication failed: ${error}`);
       process.exit(1);
     }
 
