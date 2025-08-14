@@ -18,9 +18,12 @@
   "author": "Ivan Leo & Timothy Chen",
   "license": "MIT",
   "dependencies": {
+    "@hono/node-server": "^1.18.2",
+    "commander": "^11.0.0",
     "gwanli-core": "workspace:*",
     "gwanli-mcp": "workspace:*",
-    "commander": "^11.0.0"
+    "hono": "^4.9.1",
+    "open": "^10.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

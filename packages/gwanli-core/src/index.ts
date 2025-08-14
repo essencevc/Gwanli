@@ -89,6 +89,10 @@ export function listFiles(
   `;
 }
 
+// Export config functions
+export { loadConfig, checkWorkspace, addWorkspace } from "./config/loader.js";
+export type { GwanliConfig, WorkspaceConfig } from "./config/types.js";
+
 // Export shared types
 export type {
   PageRecord,
