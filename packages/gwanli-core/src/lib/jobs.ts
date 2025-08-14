@@ -1,8 +1,13 @@
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from "fs";
+import {
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from "fs";
 import { join } from "path";
 import { GWANLI_HOME } from "../constants.js";
 import { Logger, defaultLogger } from "../logging/index.js";
-import { Runtime } from "../logging/runtime.js";
 
 export type JobStatus = "START" | "PROCESSING" | "END" | "ERROR";
 
@@ -99,45 +104,49 @@ export interface JobState {
   timestamp: number;
   state: any;
   statusPath: string;
-  prefix: 'cli' | 'mcp';
+  prefix: "cli" | "mcp";
 }
 
-export function getRecentJobs(count: number = 5, prefix?: 'cli' | 'mcp'): JobState[] {
+export function getRecentJobs(
+  count: number = 5,
+  prefix?: "cli" | "mcp"
+): JobState[] {
   try {
     const dirs = readdirSync(GWANLI_HOME, { withFileTypes: true })
-      .filter(dirent => {
+      .filter((dirent) => {
         if (!dirent.isDirectory()) return false;
-        
-        const hasValidPrefix = dirent.name.startsWith('cli-') || dirent.name.startsWith('mcp-');
+
+        const hasValidPrefix =
+          dirent.name.startsWith("cli-") || dirent.name.startsWith("mcp-");
         if (!hasValidPrefix) return false;
-        
+
         if (prefix) {
           return dirent.name.startsWith(`${prefix}-`);
         }
-        
+
         return true;
       })
-      .map(dirent => {
+      .map((dirent) => {
         const match = dirent.name.match(/^(cli|mcp)-(\d+)$/);
         const timestamp = match ? parseInt(match[2]) : 0;
-        const jobPrefix = match ? match[1] as 'cli' | 'mcp' : 'cli';
-        
+        const jobPrefix = match ? (match[1] as "cli" | "mcp") : "cli";
+
         return {
           name: dirent.name,
           timestamp,
           path: join(GWANLI_HOME, dirent.name),
-          prefix: jobPrefix
+          prefix: jobPrefix,
         };
       })
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, count);
 
-    return dirs.map(dir => {
-      const statusPath = join(dir.path, 'status.json');
+    return dirs.map((dir) => {
+      const statusPath = join(dir.path, "status.json");
       let state = null;
-      
+
       try {
-        const statusContent = readFileSync(statusPath, 'utf-8');
+        const statusContent = readFileSync(statusPath, "utf-8");
         state = JSON.parse(statusContent);
       } catch {
         // If status.json doesn't exist or is invalid, state remains null
@@ -148,7 +157,7 @@ export function getRecentJobs(count: number = 5, prefix?: 'cli' | 'mcp'): JobSta
         timestamp: dir.timestamp,
         state,
         statusPath,
-        prefix: dir.prefix
+        prefix: dir.prefix,
       };
     });
   } catch {
@@ -159,8 +168,8 @@ export function getRecentJobs(count: number = 5, prefix?: 'cli' | 'mcp'): JobSta
 export function getJobById(jobId: string): JobState | null {
   try {
     const jobPath = join(GWANLI_HOME, jobId);
-    const statusPath = join(jobPath, 'status.json');
-    
+    const statusPath = join(jobPath, "status.json");
+
     // Check if directory exists
     try {
       const stats = statSync(jobPath);
@@ -168,16 +177,16 @@ export function getJobById(jobId: string): JobState | null {
     } catch {
       return null;
     }
-    
+
     const match = jobId.match(/^(cli|mcp)-(\d+)$/);
     if (!match) return null;
-    
+
     const timestamp = parseInt(match[2]);
-    const prefix = match[1] as 'cli' | 'mcp';
-    
+    const prefix = match[1] as "cli" | "mcp";
+
     let state = null;
     try {
-      const statusContent = readFileSync(statusPath, 'utf-8');
+      const statusContent = readFileSync(statusPath, "utf-8");
       state = JSON.parse(statusContent);
     } catch {
       // If status.json doesn't exist or is invalid, state remains null
@@ -188,7 +197,7 @@ export function getJobById(jobId: string): JobState | null {
       timestamp,
       state,
       statusPath,
-      prefix
+      prefix,
     };
   } catch {
     return null;
