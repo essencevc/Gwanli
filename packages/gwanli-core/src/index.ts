@@ -1,56 +1,9 @@
-import { Client } from "@notionhq/client";
-import pLimit from "p-limit";
 import treeify from "treeify";
 import Database from "better-sqlite3";
 import { join } from "path";
 import { homedir } from "os";
-import {
-  initialise_db,
-  insertPages,
-  insertDatabases,
-  insertDatabasePages,
-  getAllSlugs,
-} from "./lib/db.js";
-import {
-  convertDatabasePageToMarkdown,
-  convertPageToMarkdown,
-  fetchAllDatabases,
-  fetchAllPages,
-  generateSlugs,
-} from "./lib/notion.js";
+import { getAllSlugs } from "./lib/db.js";
 import { buildTree, extractSlugPrefix } from "./lib/tree.js";
-
-export async function indexNotionPages(notionToken: string, db_path: string) {
-  const notion = new Client({ auth: notionToken });
-  const db = initialise_db(db_path);
-
-  // Rate limit to 2 concurrent requests for Notion API
-  const limit = pLimit(2);
-  // 1. Fetch all pages
-  const { databaseChildren, regularPages } = await fetchAllPages(notion);
-  const databases = await fetchAllDatabases(notion);
-
-  // 2. Slugify the pages
-  const id_to_slug = generateSlugs(regularPages, databases);
-  const conversionPromises = regularPages.map((page) =>
-    limit(() => convertPageToMarkdown(notion, page, id_to_slug))
-  );
-
-  const convertedPages = await Promise.all(conversionPromises);
-
-  // 4. Insert databases
-  insertDatabases(db, databases, id_to_slug);
-
-  const conversionDatabasePromises = databaseChildren.map((child) =>
-    limit(() => convertDatabasePageToMarkdown(notion, child, id_to_slug))
-  );
-
-  const convertedDatabasePages = await Promise.all(conversionDatabasePromises);
-
-  insertPages(db, convertedPages);
-
-  insertDatabasePages(db, convertedDatabasePages);
-}
 
 export function listFiles(
   db_path: string,
@@ -89,6 +42,22 @@ export function listFiles(
   `;
 }
 
+// Export notion functionality
+export { indexNotionPages } from "./lib/notion.js";
+
+// Export job management
+export { JobTracker } from "./lib/jobs.js";
+export type { JobStatus, JobInfo } from "./lib/jobs.js";
+
+// Export process utilities
+export { 
+  spawnGwanliProcess, 
+  listActiveGwanliProcesses, 
+  killGwanliProcess, 
+  getProcessByTaskName
+} from "./lib/process.js";
+export type { ProcessInfo } from "./lib/process.js";
+
 // Export config functions
 export { loadConfig, checkWorkspace, addWorkspace, updateWorkspace, deleteWorkspace } from "./config/loader.js";
 export type { GwanliConfig, WorkspaceConfig } from "./config/types.js";
@@ -107,4 +76,4 @@ export type {
   ConvertedPage,
 } from "./types/database.js";
 export type { SlugMapping, IdToSlugMap } from "./types/notion.js";
-export type { IndexJob, JobStatus } from "./types/index.js";
+export type { IndexJob } from "./types/index.js";

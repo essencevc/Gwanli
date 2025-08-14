@@ -9,6 +9,13 @@ import pLimit from "p-limit";
 import { markdownTable } from "markdown-table";
 import type { IdToSlugMap } from "../types/notion.js";
 import type { PageRecord, DatabasePageRecord } from "../types/database.js";
+import { JobTracker } from "./jobs.js";
+import {
+  initialise_db,
+  insertPages,
+  insertDatabases,
+  insertDatabasePages,
+} from "./db.js";
 
 // Rate limit to 3 requests per second
 const limit = pLimit(2);
@@ -37,7 +44,7 @@ function createDatabaseTable(
   return `## ${title}\n\n${markdownTable(tableData)}`;
 }
 
-export async function fetchAllPages(notion: Client) {
+export async function fetchAllPages(notion: Client, jobTracker: JobTracker) {
   const allPages: PageObjectResponse[] = [];
   let hasMore = true;
   let nextCursor: string | undefined = undefined;
@@ -69,7 +76,7 @@ export async function fetchAllPages(notion: Client) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     } catch (error) {
-      console.error("Error fetching pages:", error);
+      jobTracker.error("Error fetching pages:", error);
       throw error;
     }
   }
@@ -87,7 +94,7 @@ export function isDatabaseChild(page: PageObjectResponse): boolean {
   return page.parent?.type === "database_id";
 }
 
-export async function fetchAllDatabases(notion: Client) {
+export async function fetchAllDatabases(notion: Client, jobTracker: JobTracker) {
   const allDatabases: DatabaseObjectResponse[] = [];
   let hasMore = true;
   let nextCursor: string | undefined = undefined;
@@ -119,7 +126,7 @@ export async function fetchAllDatabases(notion: Client) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     } catch (error) {
-      console.error("Error fetching databases:", error);
+      jobTracker.error("Error fetching databases:", error);
       throw error;
     }
   }
@@ -290,9 +297,10 @@ function processNotionLinks(
 export async function convertPageToMarkdown(
   notion: Client,
   page: PageObjectResponse,
-  id_to_slug: IdToSlugMap
+  id_to_slug: IdToSlugMap,
+  jobTracker: JobTracker
 ): Promise<PageRecord> {
-  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const n2m = initializeMarkdownConverter(notion, id_to_slug, jobTracker);
   const mdBlocks = await n2m.pageToMarkdown(page.id);
 
   // Extract title from regular page
@@ -321,9 +329,10 @@ export async function convertPageToMarkdown(
 export async function convertDatabasePageToMarkdown(
   notion: Client,
   page: PageObjectResponse,
-  id_to_slug: IdToSlugMap
+  id_to_slug: IdToSlugMap,
+  jobTracker: JobTracker
 ): Promise<DatabasePageRecord> {
-  const n2m = initializeMarkdownConverter(notion, id_to_slug);
+  const n2m = initializeMarkdownConverter(notion, id_to_slug, jobTracker);
   const mdBlocks = await n2m.pageToMarkdown(page.id);
 
   // Process properties for database page
@@ -349,7 +358,8 @@ export async function convertDatabasePageToMarkdown(
 
 function initializeMarkdownConverter(
   notion: Client,
-  id_to_slug: IdToSlugMap
+  id_to_slug: IdToSlugMap,
+  jobTracker: JobTracker
 ): NotionToMarkdown {
   const n2m = new NotionToMarkdown({
     notionClient: notion,
@@ -391,7 +401,7 @@ function initializeMarkdownConverter(
         rows
       );
     } catch (error) {
-      console.warn(`Could not fetch database entries for ${id}:`, error);
+      jobTracker.debug(`Could not fetch database entries for ${id}:`, error);
       return createDatabaseTable(title, [], []);
     }
   });
@@ -420,4 +430,79 @@ function initializeMarkdownConverter(
   });
 
   return n2m;
+}
+
+export async function indexNotionPages(
+  notionToken: string,
+  db_path: string,
+  jobTracker: JobTracker
+) {
+  try {
+    jobTracker.info(`Starting Notion indexing job: ${jobTracker.getJobId()}`);
+    jobTracker.updateStatus("PROCESSING");
+
+    const notion = new Client({ auth: notionToken });
+    const db = initialise_db(db_path);
+
+    // Rate limit to 2 concurrent requests for Notion API
+    const limit = pLimit(2);
+
+    jobTracker.info("Fetching all pages from Notion...");
+    // 1. Fetch all pages
+    const { databaseChildren, regularPages } = await fetchAllPages(notion, jobTracker);
+    jobTracker.info(
+      `Found ${regularPages.length} regular pages and ${databaseChildren.length} database children`
+    );
+
+    jobTracker.info("Fetching all databases from Notion...");
+    const databases = await fetchAllDatabases(notion, jobTracker);
+    jobTracker.info(`Found ${databases.length} databases`);
+
+    // 2. Slugify the pages
+    jobTracker.info("Generating slugs...");
+    const id_to_slug = generateSlugs(regularPages, databases);
+
+    jobTracker.info("Converting regular pages to markdown...");
+    const conversionPromises = regularPages.map((page) =>
+      limit(() => convertPageToMarkdown(notion, page, id_to_slug, jobTracker))
+    );
+
+    const convertedPages = await Promise.all(conversionPromises);
+    jobTracker.info(`Converted ${convertedPages.length} regular pages`);
+
+    // 4. Insert databases
+    jobTracker.info("Inserting databases into database...");
+    insertDatabases(db, databases, id_to_slug);
+
+    jobTracker.info("Converting database pages to markdown...");
+    const conversionDatabasePromises = databaseChildren.map((child) =>
+      limit(() => convertDatabasePageToMarkdown(notion, child, id_to_slug, jobTracker))
+    );
+
+    const convertedDatabasePages = await Promise.all(
+      conversionDatabasePromises
+    );
+    jobTracker.info(
+      `Converted ${convertedDatabasePages.length} database pages`
+    );
+
+    jobTracker.info("Inserting pages into database...");
+    insertPages(db, convertedPages);
+
+    jobTracker.info("Inserting database pages into database...");
+    insertDatabasePages(db, convertedDatabasePages);
+
+    jobTracker.updateStatus("END");
+    jobTracker.info(
+      `Indexing job completed successfully: ${jobTracker.getJobId()}`
+    );
+
+    return jobTracker.getJobId();
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    jobTracker.error(`Indexing job failed: ${errorMessage}`, error);
+    jobTracker.updateStatus("ERROR", errorMessage);
+    throw error;
+  }
 }
