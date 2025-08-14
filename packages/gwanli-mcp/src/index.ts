@@ -3,49 +3,55 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { listFiles, indexNotionPages } from "gwanli-core";
+import { loadConfig, addWorkspace, updateWorkspace, deleteWorkspace, OAUTH_BASE_URL } from "gwanli-core";
 
-const execAsync = promisify(exec);
+// Set MCP runtime environment
+process.env.GWANLI_RUNTIME = "MCP";
 
 // Create an MCP server
 const server = new McpServer({
-  name: "demo-server",
+  name: "gwanli-mcp",
   version: "1.0.0",
 });
 
-// Add auth tool
+// Register auth tool
 server.registerTool(
   "auth",
   {
     description:
-      "Verify your Notion API key is set up correctly or provision a new one in the event it is not set up correctly",
-    inputSchema: {},
+      "Check authentication status and get OAuth URLs for workspace setup",
+    inputSchema: {
+      workspace: z
+        .string()
+        .optional()
+        .describe("Optional workspace name to get auth URL for"),
+    },
   },
-  async () => {
-    const notionApiKey = process.env.NOTION_API_KEY;
-
-    if (notionApiKey) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "User already authenticated, NOTION_API_KEY has been set",
-          },
-        ],
-      };
-    }
-
+  async (args) => {
     try {
-      // Open browser to authentication URL
-      const url = "https://worker.ivanleomk9297.workers.dev";
-      await execAsync(`open "${url}"`);
+      // Load current config to check existing workspaces
+      const config = loadConfig();
+      const existingWorkspaces = Object.keys(config.workspace);
+
+      const authUrl = `${OAUTH_BASE_URL}/`;
+
+      const message =
+        existingWorkspaces.length > 0
+          ? `**Authenticated Workspaces:**\n${existingWorkspaces
+              .map(
+                (workspace) =>
+                  `- ${workspace}${workspace === "default" ? " (default)" : ""}`
+              )
+              .join(
+                "\n"
+              )}\n\n**Get a new token for any workspace:**\n${authUrl}\n\nVisit the URL above, complete OAuth, and you'll receive a token to add to your workspace configuration.`
+          : `**No authenticated workspaces found.**\n\nGenerate a token by visiting the URL above: ${authUrl}`;
+
       return {
         content: [
           {
             type: "text",
-            text: `Opening browser to ${url} for authentication`,
+            text: message,
           },
         ],
       };
@@ -54,113 +60,194 @@ server.registerTool(
         content: [
           {
             type: "text",
-            text: `Please visit https://worker.ivanleomk9297.workers.dev to authenticate`,
+            text: `Error checking authentication: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
           },
         ],
+        isError: true,
       };
     }
   }
 );
 
-// Add ls tool
+// Register workspace management tool
 server.registerTool(
-  "ls",
+  "workspace",
   {
-    description: "List all files in the Notion workspace in a tree structure",
+    description:
+      "Manage workspace configurations - add, delete, or update workspaces",
     inputSchema: {
-      dbPath: z
+      type: z
+        .enum(["ADD", "DELETE", "UPDATE", "LIST"])
+        .describe(
+          "Type of workspace operation: ADD to create new workspace, DELETE to remove existing workspace, UPDATE to modify workspace details, LIST to show all workspaces"
+        ),
+      name: z
+        .string()
+        .optional()
+        .default("default")
+        .describe(
+          "Workspace name - defaults to 'default' if not provided. Used to identify which workspace to operate on"
+        ),
+      api_key: z
         .string()
         .optional()
         .describe(
-          "Path to the SQLite database file (defaults to ~/gwanli/notion.db)"
+          "API key/token for workspace authentication - required for ADD operations, optional for UPDATE to change the key"
         ),
-      prefix: z
+      description: z
         .string()
         .optional()
-        .describe("Filter files by prefix/slug (defaults to /)"),
-      maxDepth: z
-        .number()
-        .optional()
-        .describe("Maximum depth to display (default: 2)"),
+        .describe(
+          "Human-readable description of the workspace - required for UPDATE operations to set workspace description"
+        ),
     },
   },
-  async (args) => {
-    const dbPath = args.dbPath || "~/gwanli/notion.db";
-    const prefix = args.prefix || "/";
-    const maxDepth = args.maxDepth || 2;
-
+  async (args: any) => {
     try {
-      const tree = listFiles(dbPath, prefix, maxDepth);
-      return {
-        content: [
-          {
-            type: "text",
-            text: tree,
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error listing files: ${error.message}`,
-          },
-        ],
-      };
-    }
-  }
-);
+      switch (args.type) {
+        case "ADD":
+          if (!args.api_key) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "API key is required for adding workspace.",
+                },
+              ],
+              isError: true,
+            };
+          }
+          const addName = args.name || "default";
+          addWorkspace(addName, args.api_key, {
+            description: `Workspace: ${addName}`,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Successfully added workspace "${addName}" with API key.`,
+              },
+            ],
+          };
 
-// Add index tool
-server.registerTool(
-  "index",
-  {
-    description: "Index pages from your Notion workspace into a local database",
-    inputSchema: {
-      token: z
-        .string()
-        .optional()
-        .describe("Notion integration token (uses NOTION_API_KEY env var if not provided)"),
-      dbPath: z
-        .string()
-        .optional()
-        .describe("Path to the SQLite database file (defaults to ~/.notion.db)"),
-    },
-  },
-  async (args) => {
-    const token = args.token || process.env.NOTION_API_KEY;
-    const dbPath = args.dbPath || "~/gwanli/notion.db";
+        case "DELETE":
+          const deleteName = args.name || "default";
+          try {
+            deleteWorkspace(deleteName);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Successfully deleted workspace "${deleteName}".`,
+                },
+              ],
+            };
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Workspace "${deleteName}" not found.`,
+                },
+              ],
+              isError: true,
+            };
+          }
 
-    if (!token) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Error: Notion token is required. Provide it via the token parameter or set NOTION_API_KEY environment variable.",
-          },
-        ],
-      };
-    }
+        case "UPDATE":
+          if (!args.description) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Description is required for updating workspace.",
+                },
+              ],
+              isError: true,
+            };
+          }
+          const updateName = args.name || "default";
+          try {
+            updateWorkspace(updateName, {
+              description: args.description,
+              ...(args.api_key && { apiKey: args.api_key }),
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Successfully updated workspace "${updateName}".`,
+                },
+              ],
+            };
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Workspace "${updateName}" not found.`,
+                },
+              ],
+              isError: true,
+            };
+          }
 
-    try {
-      await indexNotionPages(token, dbPath);
+        case "LIST":
+          const config = loadConfig();
+          const workspaces = Object.entries(config.workspace);
+          
+          if (workspaces.length === 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "**No workspaces found.**\n\nUse the workspace tool with type 'ADD' to create a new workspace.",
+                },
+              ],
+            };
+          }
+
+          const workspaceList = workspaces
+            .map(([name, workspace]) => {
+              const defaultLabel = name === "default" ? " (default)" : "";
+              const description = workspace.description ? ` - ${workspace.description}` : "";
+              return `- **${name}**${defaultLabel}${description}`;
+            })
+            .join("\n");
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `**Available Workspaces:**\n\n${workspaceList}`,
+              },
+            ],
+          };
+
+        default:
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Invalid workspace operation type.",
+              },
+            ],
+            isError: true,
+          };
+      }
+    } catch (error) {
       return {
         content: [
           {
             type: "text",
-            text: `Successfully indexed Notion pages to database at ${dbPath}`,
+            text: `Error managing workspace: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
           },
         ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error indexing pages: ${error.message}`,
-          },
-        ],
+        isError: true,
       };
     }
   }

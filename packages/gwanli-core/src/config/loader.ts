@@ -70,3 +70,51 @@ export function addWorkspace(
   // Write updated config back to file
   writeFileSync(filePath, stringify(config));
 }
+
+export function updateWorkspace(
+  workspaceName: string,
+  updates: { description?: string; apiKey?: string; dbPath?: string },
+  configPath?: string
+): void {
+  const filePath = configPath || CONFIG_PATH;
+  
+  // Load current config
+  const config = loadConfig(configPath);
+  
+  // Check if workspace exists
+  if (!(workspaceName in config.workspace)) {
+    throw new Error(`Workspace "${workspaceName}" not found`);
+  }
+
+  // Update the workspace with provided values
+  if (updates.description !== undefined) {
+    config.workspace[workspaceName].description = updates.description;
+  }
+  if (updates.apiKey !== undefined) {
+    config.workspace[workspaceName].api_key = updates.apiKey;
+  }
+  if (updates.dbPath !== undefined) {
+    config.workspace[workspaceName].db_path = updates.dbPath;
+  }
+  
+  // Write updated config back to file
+  writeFileSync(filePath, stringify(config));
+}
+
+export function deleteWorkspace(workspaceName: string, configPath?: string): void {
+  const filePath = configPath || CONFIG_PATH;
+  
+  // Load current config
+  const config = loadConfig(configPath);
+  
+  // Check if workspace exists
+  if (!(workspaceName in config.workspace)) {
+    throw new Error(`Workspace "${workspaceName}" not found`);
+  }
+
+  // Remove the workspace
+  delete config.workspace[workspaceName];
+  
+  // Write updated config back to file
+  writeFileSync(filePath, stringify(config));
+}
