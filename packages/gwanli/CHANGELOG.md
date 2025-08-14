@@ -1,5 +1,17 @@
 # gwanli
 
+## 0.3.0
+
+### Minor Changes
+
+- We implemented ls indexing and auth management
+
+### Patch Changes
+
+- Updated dependencies
+  - gwanli-core@0.3.0
+  - gwanli-mcp@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
