@@ -54,6 +54,32 @@ export function initialise_db(DB_PATH: string, logger?: Logger): Database.Databa
   return db;
 }
 
+export function get_db(DB_PATH: string, logger?: Logger): Database.Database {
+  const log = logger || defaultLogger;
+  
+  // Expand ~ to home directory
+  const expandedPath = DB_PATH.startsWith("~/")
+    ? join(homedir(), DB_PATH.slice(2))
+    : DB_PATH;
+
+  log.debug(`Connecting to database at path: ${expandedPath}`);
+
+  if (!existsSync(expandedPath)) {
+    throw new Error(`Database file not found: ${expandedPath}`);
+  }
+  
+  let db: Database.Database;
+  try {
+    db = new Database(expandedPath);
+    log.debug(`Connected to database successfully at: ${expandedPath}`);
+  } catch (error) {
+    log.error("Error connecting to database at path:", expandedPath, error);
+    throw error;
+  }
+
+  return db;
+}
+
 export function insertPages(
   db: Database.Database,
   convertedPages: ConvertedPage[],
@@ -207,6 +233,191 @@ export function getAllSlugs(db: Database.Database, logger?: Logger): string[] {
     return allSlugs;
   } catch (error) {
     log.error("Error fetching slugs:", error);
+    throw error;
+  }
+}
+
+export function getPageBySlug(
+  db: Database.Database,
+  slug: string,
+  logger?: Logger
+): { id: string; title: string; content: string; slug: string; createdAt: string; lastUpdated: string; type: 'page' } | 
+   { id: string; title: string; slug: string; properties: any; createdAt: string; lastUpdated: string; type: 'database' } | 
+   null {
+  const log = logger || defaultLogger;
+  
+  try {
+    log.debug(`Fetching page with slug: ${slug}`);
+    
+    // First check the page table
+    const pageStmt = db.prepare("SELECT id, title, content, slug, createdAt, lastUpdated FROM page WHERE slug = ?");
+    const pageResult = pageStmt.get(slug) as any;
+    
+    if (pageResult) {
+      log.debug(`Found page with slug: ${slug}`);
+      return { ...pageResult, type: 'page' };
+    }
+    
+    // If not found in page table, check database table
+    const databaseStmt = db.prepare("SELECT id, title, slug, properties, createdAt, lastUpdated FROM database WHERE slug = ?");
+    const databaseResult = databaseStmt.get(slug) as any;
+    
+    if (databaseResult) {
+      log.debug(`Found database with slug: ${slug}`);
+      return { 
+        ...databaseResult, 
+        properties: JSON.parse(databaseResult.properties),
+        type: 'database' 
+      };
+    }
+    
+    log.debug(`No page or database found with slug: ${slug}`);
+    return null;
+  } catch (error) {
+    log.error(`Error fetching page with slug ${slug}:`, error);
+    throw error;
+  }
+}
+
+export function searchPages(
+  db: Database.Database,
+  query: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    includeContent?: boolean;
+  } = {},
+  logger?: Logger
+): {
+  results: Array<{ id: string; title: string; content?: string; slug: string; createdAt: string; lastUpdated: string; type: 'page' | 'database' | 'database_page'; rank: number }>;
+  totalCount: number;
+  hasMore: boolean;
+} {
+  const log = logger || defaultLogger;
+  const { limit = 10, offset = 0, includeContent = false } = options;
+  
+  try {
+    log.debug(`Searching pages with query: ${query}, limit: ${limit}, offset: ${offset}`);
+    
+    const results: any[] = [];
+    
+    // Search in pages
+    const pageFields = includeContent ? "page.id, page.title, page.content, page.slug, page.createdAt, page.lastUpdated, page_fts.rank" : "page.id, page.title, page.slug, page.createdAt, page.lastUpdated, page_fts.rank";
+    const pageStmt = db.prepare(`
+      SELECT ${pageFields}, 'page' as type
+      FROM page_fts 
+      JOIN page ON page.id = page_fts.id 
+      WHERE page_fts MATCH ? 
+      ORDER BY page_fts.rank
+    `);
+    const pageResults = pageStmt.all(query) as any[];
+    results.push(...pageResults.map(r => ({ ...r, type: 'page' as const })));
+    
+    // Search in databases
+    const databaseStmt = db.prepare(`
+      SELECT database.id, database.title, database.slug, database.createdAt, database.lastUpdated, database_fts.rank, 'database' as type
+      FROM database_fts 
+      JOIN database ON database.id = database_fts.id 
+      WHERE database_fts MATCH ? 
+      ORDER BY database_fts.rank
+    `);
+    const databaseResults = databaseStmt.all(query) as any[];
+    results.push(...databaseResults.map(r => ({ ...r, type: 'database' as const })));
+    
+    // Search in database pages if includeContent is true
+    if (includeContent) {
+      const dbPageStmt = db.prepare(`
+        SELECT database_page.id, database_page.content, database_page.createdAt, database_page.lastUpdated, database_page_fts.rank, 'database_page' as type
+        FROM database_page_fts 
+        JOIN database_page ON database_page.id = database_page_fts.id 
+        WHERE database_page_fts MATCH ? 
+        ORDER BY database_page_fts.rank
+      `);
+      const dbPageResults = dbPageStmt.all(query) as any[];
+      results.push(...dbPageResults.map(r => ({ ...r, type: 'database_page' as const, title: '', slug: '' })));
+    }
+    
+    // Sort by rank and apply pagination
+    const sortedResults = results.sort((a, b) => a.rank - b.rank);
+    const totalCount = sortedResults.length;
+    const paginatedResults = sortedResults.slice(offset, offset + limit);
+    const hasMore = offset + limit < totalCount;
+    
+    log.debug(`Found ${totalCount} results, returning ${paginatedResults.length} with offset ${offset}`);
+    
+    return {
+      results: paginatedResults,
+      totalCount,
+      hasMore
+    };
+  } catch (error) {
+    log.error(`Error searching pages with query "${query}":`, error);
+    throw error;
+  }
+}
+
+export function findPagesByPattern(
+  db: Database.Database,
+  pattern: string,
+  field: 'slug' | 'title' = 'slug',
+  options: {
+    limit?: number;
+    offset?: number;
+    includeContent?: boolean;
+  } = {},
+  logger?: Logger
+): {
+  results: Array<{ id: string; title: string; content?: string; slug: string; createdAt: string; lastUpdated: string; type: 'page' | 'database'; properties?: any }>;
+  totalCount: number;
+  hasMore: boolean;
+} {
+  const log = logger || defaultLogger;
+  const { limit = 10, offset = 0, includeContent = false } = options;
+  
+  try {
+    log.debug(`Finding pages with pattern: ${pattern} in field: ${field}, limit: ${limit}, offset: ${offset}`);
+    
+    const results: any[] = [];
+    
+    // Search in pages
+    const pageFields = includeContent ? "id, title, content, slug, createdAt, lastUpdated" : "id, title, slug, createdAt, lastUpdated";
+    const pageStmt = db.prepare(`
+      SELECT ${pageFields}, 'page' as type
+      FROM page 
+      WHERE ${field} GLOB ?
+      ORDER BY ${field}
+    `);
+    const pageResults = pageStmt.all(pattern) as any[];
+    results.push(...pageResults.map(r => ({ ...r, type: 'page' as const })));
+    
+    // Search in databases
+    const databaseStmt = db.prepare(`
+      SELECT id, title, slug, properties, createdAt, lastUpdated, 'database' as type
+      FROM database 
+      WHERE ${field} GLOB ?
+      ORDER BY ${field}
+    `);
+    const databaseResults = databaseStmt.all(pattern) as any[];
+    results.push(...databaseResults.map((r: any) => ({ 
+      ...r, 
+      type: 'database' as const,
+      properties: JSON.parse(r.properties)
+    })));
+    
+    // Apply pagination
+    const totalCount = results.length;
+    const paginatedResults = results.slice(offset, offset + limit);
+    const hasMore = offset + limit < totalCount;
+    
+    log.debug(`Found ${totalCount} results matching pattern "${pattern}", returning ${paginatedResults.length} with offset ${offset}`);
+    
+    return {
+      results: paginatedResults,
+      totalCount,
+      hasMore
+    };
+  } catch (error) {
+    log.error(`Error finding pages with pattern "${pattern}":`, error);
     throw error;
   }
 }

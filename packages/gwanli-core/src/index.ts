@@ -27,6 +27,16 @@ export { OAUTH_BASE_URL } from "./constants.js";
 // Export logging utilities
 export { Logger, defaultLogger, cliLogger } from "./logging/index.js";
 
+// Export database functions
+export { 
+  initialise_db, 
+  get_db,
+  searchPages, 
+  findPagesByPattern, 
+  getPageBySlug,
+  getAllSlugs 
+} from "./lib/db.js";
+
 // Export shared types
 export type {
   PageRecord,

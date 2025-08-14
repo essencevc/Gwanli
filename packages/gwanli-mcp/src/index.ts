@@ -16,6 +16,10 @@ import {
   getRecentJobs,
   getJobById,
   type JobState,
+  get_db,
+  searchPages,
+  findPagesByPattern,
+  getPageBySlug,
 } from "gwanli-core";
 
 // Create an MCP server
@@ -418,7 +422,9 @@ server.registerTool(
       count: z
         .number()
         .default(5)
-        .describe("Number of recent jobs to show when no ID is provided - defaults to 5"),
+        .describe(
+          "Number of recent jobs to show when no ID is provided - defaults to 5"
+        ),
       prefix: z
         .enum(["mcp", "cli"])
         .default("mcp")
@@ -430,7 +436,7 @@ server.registerTool(
       if (args.id) {
         // Get specific job by ID
         const job = getJobById(args.id);
-        
+
         if (!job) {
           return {
             content: [
@@ -443,8 +449,12 @@ server.registerTool(
           };
         }
 
-        const stateText = job.state 
-          ? `**Status:** \`\`\`json\n${JSON.stringify(job.state, null, 2)}\n\`\`\``
+        const stateText = job.state
+          ? `**Status:** \`\`\`json\n${JSON.stringify(
+              job.state,
+              null,
+              2
+            )}\n\`\`\``
           : "**Status:** No status file found";
 
         return {
@@ -458,7 +468,7 @@ server.registerTool(
       } else {
         // Get recent jobs
         const jobs = getRecentJobs(args.count, args.prefix);
-        
+
         if (jobs.length === 0) {
           return {
             content: [
@@ -472,7 +482,9 @@ server.registerTool(
 
         const jobsList = jobs
           .map((job: JobState) => {
-            const statusText = job.state?.status ? ` (${job.state.status})` : "";
+            const statusText = job.state?.status
+              ? ` (${job.state.status})`
+              : "";
             const timeStr = new Date(job.timestamp).toLocaleString();
             return `- **${job.jobId}**${statusText} - ${timeStr}`;
           })
@@ -482,7 +494,9 @@ server.registerTool(
           content: [
             {
               type: "text",
-              text: `**Recent ${args.prefix.toUpperCase()} Jobs (${jobs.length}):**\n\n${jobsList}\n\nUse checkJob with a specific ID to see detailed status.`,
+              text: `**Recent ${args.prefix.toUpperCase()} Jobs (${
+                jobs.length
+              }):**\n\n${jobsList}\n\nUse checkJob with a specific ID to see detailed status.`,
             },
           ],
         };
@@ -493,6 +507,372 @@ server.registerTool(
           {
             type: "text",
             text: `Error checking job: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register grep tool (FTS search)
+server.registerTool(
+  "grep",
+  {
+    description:
+      "Search pages using full-text search with ranking and relevance",
+    inputSchema: {
+      query: z
+        .string()
+        .min(1)
+        .describe(
+          "Search query for full-text search across pages and databases"
+        ),
+      workspace: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace name to search in - defaults to default_search from config"
+        ),
+      limit: z
+        .number()
+        .default(10)
+        .describe("Maximum number of results to return - defaults to 10"),
+      offset: z
+        .number()
+        .default(0)
+        .describe("Number of results to skip for pagination - defaults to 0"),
+      includeContent: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Include page content in results - defaults to false for performance"
+        ),
+    },
+  },
+  async (args) => {
+    try {
+      const config = loadConfig();
+
+      if (!config.default_search) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No default search configured",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const searchWorkspace = args.workspace ?? config.default_search;
+
+      // Initialize database connection
+      const db = get_db(config.workspace[searchWorkspace].db_path);
+
+      // Perform search
+      const result = searchPages(db, args.query, {
+        limit: args.limit,
+        offset: args.offset,
+        includeContent: args.includeContent,
+      });
+
+      db.close();
+
+      if (result.results.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No results found for query: "${args.query}"`,
+            },
+          ],
+        };
+      }
+
+      // Format results
+      const formattedResults = result.results
+        .map((page, index) => {
+          const title = page.title || "Untitled";
+          const slug = page.slug || "";
+          const type = page.type?.toUpperCase() || "UNKNOWN";
+          const rank = page.rank ? ` (rank: ${page.rank.toFixed(3)})` : "";
+
+          let content = `**${
+            index + 1 + args.offset
+          }. [${type}] ${title}**${rank}`;
+          if (slug) content += `\n   Slug: \`${slug}\``;
+          if (page.content && args.includeContent) {
+            const preview = page.content.substring(0, 200);
+            content += `\n   Preview: ${preview}${
+              page.content.length > 200 ? "..." : ""
+            }`;
+          }
+          content += `\n   Updated: ${new Date(
+            page.lastUpdated
+          ).toLocaleString()}`;
+
+          return content;
+        })
+        .join("\n\n");
+
+      const paginationInfo = `**Results ${args.offset + 1}-${
+        args.offset + result.results.length
+      } of ${result.totalCount}**${result.hasMore ? " (more available)" : ""}`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `**Search Results for: "${args.query}"**\n\n${paginationInfo}\n\n${formattedResults}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error searching pages: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register glob tool (pattern matching)
+server.registerTool(
+  "glob",
+  {
+    description:
+      "Find pages using glob patterns (*, ?, [abc]) on slug or title fields",
+    inputSchema: {
+      pattern: z
+        .string()
+        .min(1)
+        .describe(
+          "Glob pattern to match against (e.g., 'project/*', 'meeting-*-notes', '[abc]*')"
+        ),
+      field: z
+        .enum(["slug", "title"])
+        .default("slug")
+        .describe("Field to match pattern against - defaults to 'slug'"),
+      workspace: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace name to search in - defaults to default_search from config"
+        ),
+      limit: z
+        .number()
+        .default(10)
+        .describe("Maximum number of results to return - defaults to 10"),
+      offset: z
+        .number()
+        .default(0)
+        .describe("Number of results to skip for pagination - defaults to 0"),
+      includeContent: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Include page content in results - defaults to false for performance"
+        ),
+    },
+  },
+  async (args) => {
+    try {
+      const config = loadConfig();
+
+      if (!config.default_search) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No default search configured",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const searchWorkspace = args.workspace ?? config.default_search;
+
+      // Initialize database connection
+      const db = get_db(config.workspace[searchWorkspace].db_path);
+
+      // Perform pattern search
+      const result = findPagesByPattern(db, args.pattern, args.field, {
+        limit: args.limit,
+        offset: args.offset,
+        includeContent: args.includeContent,
+      });
+
+      db.close();
+
+      if (result.results.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No results found for pattern: "${args.pattern}" in field: ${args.field}`,
+            },
+          ],
+        };
+      }
+
+      // Format results
+      const formattedResults = result.results
+        .map((page, index) => {
+          const title = page.title || "Untitled";
+          const slug = page.slug || "";
+          const type = page.type?.toUpperCase() || "UNKNOWN";
+
+          let content = `**${index + 1 + args.offset}. [${type}] ${title}**`;
+          if (slug) content += `\n   Slug: \`${slug}\``;
+          if (page.content && args.includeContent) {
+            const preview = page.content.substring(0, 200);
+            content += `\n   Preview: ${preview}${
+              page.content.length > 200 ? "..." : ""
+            }`;
+          }
+          content += `\n   Updated: ${new Date(
+            page.lastUpdated
+          ).toLocaleString()}`;
+
+          return content;
+        })
+        .join("\n\n");
+
+      const paginationInfo = `**Results ${args.offset + 1}-${
+        args.offset + result.results.length
+      } of ${result.totalCount}**${result.hasMore ? " (more available)" : ""}`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `**Pattern Results for: "${args.pattern}" (${args.field})**\n\n${paginationInfo}\n\n${formattedResults}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error finding pages by pattern: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register view tool (single page retrieval)
+server.registerTool(
+  "view",
+  {
+    description: "View a specific page by its slug",
+    inputSchema: {
+      slug: z.string().min(1).describe("Slug of the page to view"),
+      workspace: z
+        .string()
+        .optional()
+        .describe(
+          "Workspace name to search in - defaults to default_search from config"
+        ),
+      includeContent: z
+        .boolean()
+        .default(true)
+        .describe("Include page content in results - defaults to true"),
+    },
+  },
+  async (args) => {
+    try {
+      const config = loadConfig();
+
+      if (!config.default_search) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No default search configured",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const searchWorkspace = args.workspace ?? config.default_search;
+
+      // Initialize database connection
+      const db = get_db(config.workspace[searchWorkspace].db_path);
+
+      // Get page by slug
+      const page = getPageBySlug(db, args.slug);
+
+      db.close();
+
+      if (!page) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Page not found with slug: "${args.slug}"`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Format page details
+      const title = page.title || "Untitled";
+      const type = page.type?.toUpperCase() || "UNKNOWN";
+      const createdDate = new Date(page.createdAt).toLocaleString();
+      const updatedDate = new Date(page.lastUpdated).toLocaleString();
+
+      let formattedPage = `**[${type}] ${title}**\n`;
+      formattedPage += `**Slug:** \`${page.slug}\`\n`;
+      formattedPage += `**ID:** \`${page.id}\`\n`;
+      formattedPage += `**Created:** ${createdDate}\n`;
+      formattedPage += `**Updated:** ${updatedDate}\n`;
+
+      if (page.type === "database" && "properties" in page && page.properties) {
+        formattedPage += `**Properties:** ${JSON.stringify(
+          page.properties,
+          null,
+          2
+        )}\n`;
+      }
+
+      if (args.includeContent && "content" in page && page.content) {
+        formattedPage += `\n**Content:**\n${page.content}`;
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: formattedPage,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error viewing page: ${
               error instanceof Error ? error.message : String(error)
             }`,
           },
