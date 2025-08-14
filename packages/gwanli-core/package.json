@@ -1,6 +1,6 @@
 {
   "name": "gwanli-core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Core library for Notion workspace management and search",
   "type": "module",
   "main": "dist/index.js",

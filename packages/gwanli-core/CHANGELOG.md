@@ -1,5 +1,11 @@
 # gwanli-core
 
+## 0.4.1
+
+### Patch Changes
+
+- Implemented initial support for grep and globs
+
 ## 0.4.0
 
 ### Minor Changes
