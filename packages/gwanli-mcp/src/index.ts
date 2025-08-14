@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadConfig, addWorkspace, updateWorkspace, deleteWorkspace, OAUTH_BASE_URL } from "gwanli-core";
+import { loadConfig, addWorkspace, updateWorkspace, deleteWorkspace, OAUTH_BASE_URL, checkWorkspace } from "gwanli-core";
 
 // Set MCP runtime environment
 process.env.GWANLI_RUNTIME = "MCP";
@@ -243,6 +243,68 @@ server.registerTool(
           {
             type: "text",
             text: `Error managing workspace: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Register index tool
+server.registerTool(
+  "index",
+  {
+    description: "Start indexing a Notion workspace in the background",
+    inputSchema: {
+      workspace: z
+        .string()
+        .default("default")
+        .describe(
+          "Workspace name to index - defaults to 'default' if not provided"
+        ),
+    },
+  },
+  async (args) => {
+    try {
+      const workspaceName = args.workspace || "default";
+      
+      // Check if workspace exists
+      if (!checkWorkspace(workspaceName)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workspace "${workspaceName}" not found. Use the workspace tool to list available workspaces or add a new one.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Spawn the CLI indexing command
+      const { spawn } = await import("child_process");
+      spawn('gwanli', ['index', '-w', workspaceName], { 
+        detached: true,
+        stdio: 'ignore'
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Indexing of Notion workspace has begun. Check back in a while to see its progress",
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error starting indexing: ${
               error instanceof Error ? error.message : String(error)
             }`,
           },

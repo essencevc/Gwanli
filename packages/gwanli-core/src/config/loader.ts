@@ -1,16 +1,17 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { parse, stringify } from "smol-toml";
-import { GwanliConfig, GlobalConfigSchema, GWANLI_DIR, WorkspaceConfig } from "./types.js";
+import { GwanliConfig, GlobalConfigSchema, WorkspaceConfig } from "./types.js";
+import { GWANLI_HOME } from "../constants.js";
 
-const CONFIG_PATH = join(GWANLI_DIR, "gwanli.toml");
+const CONFIG_PATH = join(GWANLI_HOME, "gwanli.toml");
 
 export function loadConfig(configPath?: string): GwanliConfig {
   const filePath = configPath || CONFIG_PATH;
 
   // Create the gwanli directory if it doesn't exist
-  if (!existsSync(GWANLI_DIR)) {
-    mkdirSync(GWANLI_DIR, { recursive: true });
+  if (!existsSync(GWANLI_HOME)) {
+    mkdirSync(GWANLI_HOME, { recursive: true });
   }
 
   // Create the config file if it doesn't exist
@@ -57,7 +58,7 @@ export function addWorkspace(
   const workspaceConfig: WorkspaceConfig = {
     name: workspaceName,
     api_key: apiKey,
-    db_path: options?.dbPath || join(GWANLI_DIR, `${workspaceName}.db`),
+    db_path: options?.dbPath || join(GWANLI_HOME, `${workspaceName}.db`),
     ...(options?.description && { description: options.description })
   };
 

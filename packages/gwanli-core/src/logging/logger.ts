@@ -1,8 +1,9 @@
-import pino from 'pino';
-import type { Logger as PinoLogger } from 'pino';
-import { mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { detectRuntime, Runtime } from './runtime.js';
+import pino from "pino";
+import type { Logger as PinoLogger } from "pino";
+import { mkdirSync } from "fs";
+import { dirname, join } from "path";
+import { detectRuntime, Runtime } from "./runtime.js";
+import { GWANLI_HOME } from "../constants.js";
 
 /**
  * Simple Logger that mimics console but handles CLI vs MCP context
@@ -14,28 +15,37 @@ export class Logger {
   /**
    * Initialize Pino logger
    */
-  private static initPino(): PinoLogger {
+  static initPino(logDir?: string, prefix?: string): PinoLogger {
     if (this.pino) return this.pino;
-    
-    const logPath = process.env.GWANLI_LOG_PATH || `${process.env.HOME}/.gwanli/logs/app.log`;
-    
+
+    const defaultLogPath = join(GWANLI_HOME, "logs", "app.log");
+    const logPath = logDir ? join(logDir, "app.log") : defaultLogPath;
+
     // Create directory if it doesn't exist
     try {
       mkdirSync(dirname(logPath), { recursive: true });
     } catch (error) {
       // Ignore error if directory already exists
     }
-    
+
     this.pino = pino({
-      level: 'debug',
+      level: "debug",
+      formatters: prefix
+        ? {
+            log: (object) => ({
+              ...object,
+              msg: `${prefix} ${object.msg || ""}`.trim(),
+            }),
+          }
+        : undefined,
       transport: {
-        target: 'pino/file',
+        target: "pino/file",
         options: {
           destination: logPath,
         },
       },
     });
-    
+
     return this.pino;
   }
 
@@ -57,7 +67,7 @@ export class Logger {
   static log(message?: any, ...optionalParams: any[]): void {
     // Console output
     this.console(message, ...optionalParams);
-    
+
     // Pino logging
     this.initPino().info(message, ...optionalParams);
   }
@@ -68,7 +78,7 @@ export class Logger {
   static error(message?: any, ...optionalParams: any[]): void {
     // Console output (always stderr)
     console.error(message, ...optionalParams);
-    
+
     // Pino logging
     this.initPino().error(message, ...optionalParams);
   }
@@ -86,11 +96,11 @@ export class Logger {
   static debug(message?: any, ...optionalParams: any[]): void {
     // Console output
     if (this.runtime === Runtime.CLI) {
-      console.log('[DEBUG]', message, ...optionalParams);
+      console.log("[DEBUG]", message, ...optionalParams);
     } else {
-      console.error('[DEBUG]', message, ...optionalParams);
+      console.error("[DEBUG]", message, ...optionalParams);
     }
-    
+
     // Pino logging
     this.initPino().debug(message, ...optionalParams);
   }
