@@ -516,28 +516,20 @@ export async function createPageFromMarkdown(
   markdownContent: string,
   parentSlug: string,
   title: string,
-  db_path: string,
-  jobTracker?: JobTracker
+  db_path: string
 ): Promise<string> {
   const notion = new Client({ auth: notionToken });
   const db = get_db(db_path);
-  const log = jobTracker || { info: console.log, error: console.error, debug: console.log };
 
   try {
-    log.info(`Creating page "${title}" with parent slug: ${parentSlug}`);
-
     // Find the parent page by slug
     const parentPage = getPageBySlug(db, parentSlug);
     if (!parentPage) {
       throw new Error(`Parent page not found with slug: ${parentSlug}`);
     }
 
-    log.debug(`Found parent page: ${parentPage.title} (${parentPage.id})`);
-
     // Convert markdown to Notion blocks using martian
     const blocks = markdownToBlocks(markdownContent);
-    
-    log.debug(`Converted markdown to ${blocks.length} blocks`);
 
     // Create the page in Notion - cast blocks to compatible type
     const createPageParams: CreatePageParameters = {
@@ -560,13 +552,10 @@ export async function createPageFromMarkdown(
     };
 
     const response = await notion.pages.create(createPageParams);
-    log.info(`Successfully created page in Notion with ID: ${response.id}`);
-
     return response.id;
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    log.error(`Failed to create page: ${errorMessage}`, error);
-    throw error;
+    throw new Error(`Failed to create page: ${errorMessage}`);
   }
 }
