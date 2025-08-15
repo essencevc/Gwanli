@@ -559,3 +559,84 @@ export async function createPageFromMarkdown(
     throw new Error(`Failed to create page: ${errorMessage}`);
   }
 }
+
+export async function replaceParagraph(
+  notionToken: string,
+  slug: string,
+  oldParagraph: string,
+  newParagraph: string,
+  db_path: string
+): Promise<string> {
+  const notion = new Client({ auth: notionToken });
+  const db = get_db(db_path);
+
+  try {
+    // Find the page by slug
+    const page = getPageBySlug(db, slug);
+    if (!page) {
+      throw new Error(`Page not found with slug: ${slug}`);
+    }
+
+    // Get all blocks from the page
+    const response = await notion.blocks.children.list({
+      block_id: page.id,
+      page_size: 100,
+    });
+
+    // Find the block that matches the old paragraph and its position
+    let targetBlockId: string | null = null;
+    let targetBlockIndex = -1;
+    
+    for (let i = 0; i < response.results.length; i++) {
+      const block = response.results[i];
+      // Type guard to ensure we have a full block object
+      if ("type" in block && block.type === "paragraph" && "paragraph" in block) {
+        // Extract text content from the paragraph
+        const textContent = block.paragraph.rich_text
+          .map((rt: any) => rt.plain_text || "")
+          .join("");
+        
+        if (textContent.trim() === oldParagraph.trim()) {
+          targetBlockId = block.id;
+          targetBlockIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (!targetBlockId) {
+      throw new Error(`Paragraph not found: "${oldParagraph}"`);
+    }
+
+    // Convert new paragraph markdown to Notion blocks
+    const newBlocks = markdownToBlocks(newParagraph);
+
+    // Insert the new paragraph at the correct position
+    if (targetBlockIndex === 0) {
+      // If it's the first block, append to the beginning
+      await notion.blocks.children.append({
+        block_id: page.id,
+        children: newBlocks as any,
+      });
+    } else {
+      // Insert after the previous block
+      const previousBlock = response.results[targetBlockIndex - 1];
+      await notion.blocks.children.append({
+        block_id: page.id,
+        children: newBlocks as any,
+        after: previousBlock.id,
+      });
+    }
+
+    // Delete the old paragraph block after inserting the new one
+    await notion.blocks.delete({
+      block_id: targetBlockId,
+    });
+
+    return page.id;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to replace paragraph: ${errorMessage}`);
+  }
+}

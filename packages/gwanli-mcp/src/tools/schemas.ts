@@ -224,6 +224,30 @@ export const CreatePageTool = {
   }),
 } as const;
 
+// Replace Content tool schema
+export const ReplaceContentTool = {
+  name: "replaceContent" as const,
+  description: "Replace a specific paragraph in a Notion page with new content",
+  inputSchema: z.object({
+    slug: z
+      .string()
+      .min(1)
+      .describe("Slug of the page to modify (must include leading slash, e.g., /home/personal/fitness)"),
+    oldParagraph: z
+      .string()
+      .min(1)
+      .describe("Exact text content of the paragraph to replace (plain text, formatting will be stripped)"),
+    newParagraph: z
+      .string()
+      .min(1)
+      .describe("New paragraph content in markdown format"),
+    workspace: z
+      .string()
+      .optional()
+      .describe("Workspace name to use - defaults to default_search from config"),
+  }),
+} as const;
+
 // Export all tools
 export const Tools = {
   auth: AuthTool,
@@ -236,6 +260,7 @@ export const Tools = {
   checkJob: CheckJobTool,
   listWorkspace: ListWorkspaceTool,
   createPage: CreatePageTool,
+  replaceContent: ReplaceContentTool,
 } as const;
 
 // Generate TypeScript types
@@ -249,3 +274,4 @@ export type ListJobsArgs = z.infer<typeof ListJobsTool.inputSchema>;
 export type CheckJobArgs = z.infer<typeof CheckJobTool.inputSchema>;
 export type ListWorkspaceArgs = z.infer<typeof ListWorkspaceTool.inputSchema>;
 export type CreatePageArgs = z.infer<typeof CreatePageTool.inputSchema>;
+export type ReplaceContentArgs = z.infer<typeof ReplaceContentTool.inputSchema>;
