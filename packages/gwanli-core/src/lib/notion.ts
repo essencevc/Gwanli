@@ -3,8 +3,10 @@ import type {
   SearchResponse,
   PageObjectResponse,
   DatabaseObjectResponse,
+  CreatePageParameters,
 } from "@notionhq/client/build/src/api-endpoints.js";
 import { NotionToMarkdown } from "notion-to-md";
+import { markdownToBlocks } from "@tryfabric/martian";
 import pLimit from "p-limit";
 import { markdownTable } from "markdown-table";
 import type { IdToSlugMap } from "../types/notion.js";
@@ -15,6 +17,8 @@ import {
   insertPages,
   insertDatabases,
   insertDatabasePages,
+  get_db,
+  getPageBySlug,
 } from "./db.js";
 
 // Rate limit to 3 requests per second
@@ -503,6 +507,66 @@ export async function indexNotionPages(
       error instanceof Error ? error.message : "Unknown error";
     jobTracker.error(`Indexing job failed: ${errorMessage}`, error);
     jobTracker.updateStatus("ERROR", errorMessage);
+    throw error;
+  }
+}
+
+export async function createPageFromMarkdown(
+  notionToken: string,
+  markdownContent: string,
+  parentSlug: string,
+  title: string,
+  db_path: string,
+  jobTracker?: JobTracker
+): Promise<string> {
+  const notion = new Client({ auth: notionToken });
+  const db = get_db(db_path);
+  const log = jobTracker || { info: console.log, error: console.error, debug: console.log };
+
+  try {
+    log.info(`Creating page "${title}" with parent slug: ${parentSlug}`);
+
+    // Find the parent page by slug
+    const parentPage = getPageBySlug(db, parentSlug);
+    if (!parentPage) {
+      throw new Error(`Parent page not found with slug: ${parentSlug}`);
+    }
+
+    log.debug(`Found parent page: ${parentPage.title} (${parentPage.id})`);
+
+    // Convert markdown to Notion blocks using martian
+    const blocks = markdownToBlocks(markdownContent);
+    
+    log.debug(`Converted markdown to ${blocks.length} blocks`);
+
+    // Create the page in Notion - cast blocks to compatible type
+    const createPageParams: CreatePageParameters = {
+      parent: {
+        type: "page_id",
+        page_id: parentPage.id,
+      },
+      properties: {
+        title: {
+          title: [
+            {
+              text: {
+                content: title,
+              },
+            },
+          ],
+        },
+      },
+      children: blocks as any, // Type assertion to handle compatibility issues
+    };
+
+    const response = await notion.pages.create(createPageParams);
+    log.info(`Successfully created page in Notion with ID: ${response.id}`);
+
+    return response.id;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    log.error(`Failed to create page: ${errorMessage}`, error);
     throw error;
   }
 }
