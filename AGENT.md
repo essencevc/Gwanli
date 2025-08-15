@@ -28,9 +28,25 @@
 
 ```
 packages/
-├── mcp/           # MCP server (currently basic echo server)
-├── gh-action/     # GitHub Action implementation
-└── core/          # Shared utilities and types (planned)
+├── gwanli-mcp/    # Feature-complete MCP server with 9 tools
+│   ├── src/
+│   │   ├── index.ts                    # Main server (15 lines)
+│   │   └── tools/
+│   │       ├── schemas.ts             # Tool definitions & Zod schemas
+│   │       ├── types.ts               # Shared TypeScript types
+│   │       ├── registry.ts            # Tool registration system
+│   │       └── implementations/       # Individual tool handlers
+│   │           ├── auth.ts
+│   │           ├── workspace.ts
+│   │           ├── search.ts
+│   │           ├── glob.ts
+│   │           ├── view.ts
+│   │           ├── index.ts
+│   │           ├── jobs.ts
+│   │           └── listWorkspace.ts
+├── gwanli-core/   # Core Notion management functionality
+├── gwanli/        # CLI interface
+└── gh-action/     # GitHub Action implementation
 apps/
 └── web/           # Frontend application (planned)
 ```
@@ -100,6 +116,106 @@ apps/
 - Validate all inputs before processing
 - Provide meaningful error messages
 - Handle both validation errors and runtime errors appropriately
+
+## How to Define a New MCP Tool
+
+Follow this step-by-step process to add a new MCP tool to the gwanli-mcp server:
+
+### 1. Define Tool Schema (`src/tools/schemas.ts`)
+
+Add your tool definition with proper Zod validation:
+
+```typescript
+// Example: Weather tool schema
+export const WeatherTool = {
+  name: "getWeather" as const,
+  description: "Get weather information for a location",
+  inputSchema: z.object({
+    location: z.string().min(1).describe("Location to get weather for"),
+    units: z.enum(["celsius", "fahrenheit"]).default("celsius")
+      .describe("Temperature units - defaults to celsius"),
+  }),
+} as const;
+```
+
+### 2. Add to Tools Export
+
+Update the `Tools` export and add TypeScript type:
+
+```typescript
+// Export all tools
+export const Tools = {
+  // ... existing tools
+  getWeather: WeatherTool,
+} as const;
+
+// Generate TypeScript types  
+export type GetWeatherArgs = z.infer<typeof WeatherTool.inputSchema>;
+```
+
+### 3. Create Implementation (`src/tools/implementations/weather.ts`)
+
+Create a handler file with proper error handling:
+
+```typescript
+import type { GetWeatherArgs } from "../schemas.js";
+import type { McpResponse, ToolHandler } from "../types.js";
+
+export const weatherHandler: ToolHandler<GetWeatherArgs> = async (args) => {
+  try {
+    // Your tool logic here
+    const weather = await fetchWeather(args.location, args.units);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Weather in ${args.location}: ${weather.temperature}°${args.units}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text", 
+          text: `Error getting weather: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        },
+      ],
+      isError: true,
+    };
+  }
+};
+```
+
+### 4. Register in Registry (`src/tools/registry.ts`)
+
+Import and add your handler:
+
+```typescript
+import { weatherHandler } from "./implementations/weather.js";
+
+export const toolHandlers = {
+  // ... existing handlers
+  getWeather: weatherHandler,
+} as const;
+```
+
+### 5. Build and Test
+
+```bash
+bun run build:mcp
+```
+
+**Key Patterns to Follow:**
+- Always use `McpResponse` return type with `content` array
+- Include `isError: true` for error responses  
+- Validate inputs with `tool.inputSchema.parse(args)`
+- Use descriptive error messages
+- Follow async/await patterns consistently
+- Keep handlers pure and testable
 
 ## Knowledge Management
 
