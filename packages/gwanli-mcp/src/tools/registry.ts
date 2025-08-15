@@ -7,6 +7,7 @@ import { globHandler } from "./implementations/glob.js";
 import { viewHandler } from "./implementations/view.js";
 import { listJobsHandler, checkJobHandler } from "./implementations/jobs.js";
 import { listWorkspaceHandler } from "./implementations/listWorkspace.js";
+import { createPageHandler } from "./implementations/createPage.js";
 
 // Tool handler registry with proper typing
 export const toolHandlers = {
@@ -19,6 +20,7 @@ export const toolHandlers = {
   listJobs: listJobsHandler,
   checkJob: checkJobHandler,
   listWorkspace: listWorkspaceHandler,
+  createPage: createPageHandler,
 } as const;
 
 // Convert Zod schema to MCP-compatible JSON schema format

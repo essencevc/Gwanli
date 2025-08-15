@@ -200,6 +200,30 @@ export const ListWorkspaceTool = {
   }),
 } as const;
 
+// Create Page tool schema
+export const CreatePageTool = {
+  name: "createPage" as const,
+  description: "Create a new Notion page from markdown content with optional parent slug",
+  inputSchema: z.object({
+    title: z
+      .string()
+      .min(1)
+      .describe("Title of the new page"),
+    markdownContent: z
+      .string()
+      .min(1)
+      .describe("Markdown content for the page body"),
+    parentSlug: z
+      .string()
+      .optional()
+      .describe("Slug of the parent page - if null/empty, page will be created under workspace root"),
+    workspace: z
+      .string()
+      .optional()
+      .describe("Workspace name to use - defaults to default_search from config"),
+  }),
+} as const;
+
 // Export all tools
 export const Tools = {
   auth: AuthTool,
@@ -211,6 +235,7 @@ export const Tools = {
   listJobs: ListJobsTool,
   checkJob: CheckJobTool,
   listWorkspace: ListWorkspaceTool,
+  createPage: CreatePageTool,
 } as const;
 
 // Generate TypeScript types
@@ -223,3 +248,4 @@ export type ViewArgs = z.infer<typeof ViewTool.inputSchema>;
 export type ListJobsArgs = z.infer<typeof ListJobsTool.inputSchema>;
 export type CheckJobArgs = z.infer<typeof CheckJobTool.inputSchema>;
 export type ListWorkspaceArgs = z.infer<typeof ListWorkspaceTool.inputSchema>;
+export type CreatePageArgs = z.infer<typeof CreatePageTool.inputSchema>;
