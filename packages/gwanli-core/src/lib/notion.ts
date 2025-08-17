@@ -611,6 +611,57 @@ export async function createPageFromMarkdown(
   }
 }
 
+async function findBlocksByContent(
+  notion: Client,
+  pageId: string,
+  searchContent: string,
+  find_all: boolean = false
+): Promise<string | string[]> {
+  // Get all blocks from the page
+  const response = await notion.blocks.children.list({
+    block_id: pageId,
+    page_size: 100,
+  });
+
+  const n2m = new NotionToMarkdown({ notionClient: notion });
+  const matchingBlocks: { id: string; index: number }[] = [];
+
+  // Convert each block to markdown and search for matches
+  for (let i = 0; i < response.results.length; i++) {
+    const block = response.results[i];
+    
+    if (!("type" in block)) continue;
+
+    try {
+      // Convert single block to markdown using notion-to-md
+      const mdBlocks = await n2m.blocksToMarkdown([block as any]);
+      const markdownContent = n2m.toMarkdownString(mdBlocks).parent;
+
+      // Check if the search content is found in the markdown representation
+      if (markdownContent.trim().includes(searchContent.trim())) {
+        matchingBlocks.push({ id: block.id, index: i });
+      }
+    } catch (error) {
+      // Skip blocks that can't be converted to markdown
+      continue;
+    }
+  }
+
+  if (!find_all) {
+    // Default behavior: require exactly one match
+    if (matchingBlocks.length === 0) {
+      throw new Error(`No blocks found containing: "${searchContent}"`);
+    }
+    if (matchingBlocks.length > 1) {
+      throw new Error(`Multiple blocks found containing: "${searchContent}". Found ${matchingBlocks.length} matches. Please provide more specific content.`);
+    }
+    return matchingBlocks[0].id;
+  } else {
+    // Return all matching block IDs
+    return matchingBlocks.map(block => block.id);
+  }
+}
+
 export async function replaceParagraph(
   notionToken: string,
   slug: string,
@@ -700,8 +751,8 @@ export async function appendToPage(
   slug: string,
   markdownContent: string,
   db_path: string,
-  beforeBlockId?: string,
-  afterBlockId?: string
+  beforeBlockMarkdown?: string,
+  afterBlockMarkdown?: string
 ): Promise<string> {
   const notion = new Client({ auth: notionToken });
   const db = get_db(db_path);
@@ -716,7 +767,7 @@ export async function appendToPage(
     // Convert markdown content to Notion blocks
     const newBlocks = markdownToBlocks(markdownContent);
 
-    if (!beforeBlockId && !afterBlockId) {
+    if (!beforeBlockMarkdown && !afterBlockMarkdown) {
       // Simple append to end of page
       await notion.blocks.children.append({
         block_id: page.id,
@@ -731,15 +782,14 @@ export async function appendToPage(
       page_size: 100,
     });
 
-    if (beforeBlockId) {
-      // Find the target block by ID
-      const targetBlock = response.results.find(block => 
-        "id" in block && block.id === beforeBlockId
-      );
-
-      if (!targetBlock) {
-        throw new Error(`Block not found with ID: ${beforeBlockId}`);
-      }
+    if (beforeBlockMarkdown) {
+      // Find the target block by markdown content
+      const beforeBlockId = await findBlocksByContent(
+        notion,
+        page.id,
+        beforeBlockMarkdown,
+        false // find_all = false, require unique match
+      ) as string;
 
       const targetIndex = response.results.findIndex(block => 
         "id" in block && block.id === beforeBlockId
@@ -748,6 +798,7 @@ export async function appendToPage(
       if (targetIndex === 0) {
         // Special case: inserting before first item
         // We need to create a copy of the first item, insert our content, then replace the original
+        const targetBlock = response.results[0];
         
         // First, append our new content to the page
         await notion.blocks.children.append({
@@ -755,15 +806,7 @@ export async function appendToPage(
           children: newBlocks as any,
         });
 
-        // Get updated page blocks to find our newly added content
-        const updatedResponse = await notion.blocks.children.list({
-          block_id: page.id,
-          page_size: 100,
-        });
-
-        // Our new blocks will be at the end, we need to move them to the beginning
-        // Since Notion doesn't support direct moving, we delete the original first block
-        // and let our content naturally be at the top
+        // Delete the original first block
         await notion.blocks.delete({
           block_id: beforeBlockId,
         });
@@ -787,16 +830,16 @@ export async function appendToPage(
           after: "id" in previousBlock ? previousBlock.id : undefined,
         });
       }
-    } else if (afterBlockId) {
+    } else if (afterBlockMarkdown) {
+      // Find the target block by markdown content
+      const afterBlockId = await findBlocksByContent(
+        notion,
+        page.id,
+        afterBlockMarkdown,
+        false // find_all = false, require unique match
+      ) as string;
+
       // Insert after the specified block
-      const targetBlock = response.results.find(block => 
-        "id" in block && block.id === afterBlockId
-      );
-
-      if (!targetBlock) {
-        throw new Error(`Block not found with ID: ${afterBlockId}`);
-      }
-
       await notion.blocks.children.append({
         block_id: page.id,
         children: newBlocks as any,

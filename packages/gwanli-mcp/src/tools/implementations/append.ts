@@ -56,15 +56,15 @@ export const appendHandler: ToolHandler<AppendArgs> = async (args) => {
         args.slug,
         args.markdownContent,
         workspace.db_path,
-        args.beforeBlockId,
-        args.afterBlockId
+        args.beforeBlockMarkdown,
+        args.afterBlockMarkdown
       );
 
       let positionMessage = "at the end of the page";
-      if (args.beforeBlockId) {
-        positionMessage = `before block ${args.beforeBlockId}`;
-      } else if (args.afterBlockId) {
-        positionMessage = `after block ${args.afterBlockId}`;
+      if (args.beforeBlockMarkdown) {
+        positionMessage = `before block containing "${args.beforeBlockMarkdown}"`;
+      } else if (args.afterBlockMarkdown) {
+        positionMessage = `after block containing "${args.afterBlockMarkdown}"`;
       }
 
       return {

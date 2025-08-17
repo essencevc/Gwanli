@@ -251,7 +251,7 @@ export const ReplaceContentTool = {
 // Append Content tool schema
 export const AppendTool = {
   name: "append" as const,
-  description: "Append markdown content to a Notion page at a specific position or at the end",
+  description: "Append markdown content to a Notion page. Can position content before/after existing blocks by matching their text content, or append to the end if no position specified",
   inputSchema: z.object({
     slug: z
       .string()
@@ -261,14 +261,14 @@ export const AppendTool = {
       .string()
       .min(1)
       .describe("Markdown content to append to the page"),
-    beforeBlockId: z
+    beforeBlockMarkdown: z
       .string()
       .optional()
-      .describe("Block ID to insert content before - if provided, content will be inserted before this block"),
-    afterBlockId: z
+      .describe("Markdown content of the block to insert content before - content will be inserted before the first block containing this text"),
+    afterBlockMarkdown: z
       .string()
       .optional()
-      .describe("Block ID to insert content after - if provided, content will be inserted after this block"),
+      .describe("Markdown content of the block to insert content after - content will be inserted after the first block containing this text"),
     workspace: z
       .string()
       .optional()
