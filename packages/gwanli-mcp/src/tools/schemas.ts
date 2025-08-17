@@ -248,6 +248,34 @@ export const ReplaceContentTool = {
   }),
 } as const;
 
+// Append Content tool schema
+export const AppendTool = {
+  name: "append" as const,
+  description: "Append markdown content to a Notion page at a specific position or at the end",
+  inputSchema: z.object({
+    slug: z
+      .string()
+      .min(1)
+      .describe("Slug of the page to modify (must include leading slash, e.g., /home/personal/fitness)"),
+    markdownContent: z
+      .string()
+      .min(1)
+      .describe("Markdown content to append to the page"),
+    beforeBlockId: z
+      .string()
+      .optional()
+      .describe("Block ID to insert content before - if provided, content will be inserted before this block"),
+    afterBlockId: z
+      .string()
+      .optional()
+      .describe("Block ID to insert content after - if provided, content will be inserted after this block"),
+    workspace: z
+      .string()
+      .optional()
+      .describe("Workspace name to use - defaults to default_search from config"),
+  }),
+} as const;
+
 // Export all tools
 export const Tools = {
   auth: AuthTool,
@@ -261,6 +289,7 @@ export const Tools = {
   listWorkspace: ListWorkspaceTool,
   createPage: CreatePageTool,
   replaceContent: ReplaceContentTool,
+  append: AppendTool,
 } as const;
 
 // Generate TypeScript types
@@ -275,3 +304,4 @@ export type CheckJobArgs = z.infer<typeof CheckJobTool.inputSchema>;
 export type ListWorkspaceArgs = z.infer<typeof ListWorkspaceTool.inputSchema>;
 export type CreatePageArgs = z.infer<typeof CreatePageTool.inputSchema>;
 export type ReplaceContentArgs = z.infer<typeof ReplaceContentTool.inputSchema>;
+export type AppendArgs = z.infer<typeof AppendTool.inputSchema>;

@@ -2,7 +2,7 @@
 export { listFiles } from "./lib/workspace-explorer.js";
 
 // Export notion functionality
-export { indexNotionPages, createPageFromMarkdown, replaceParagraph } from "./lib/notion.js";
+export { indexNotionPages, createPageFromMarkdown, replaceParagraph, appendToPage } from "./lib/notion.js";
 
 // Export job management
 export { JobTracker, getRecentJobs, getJobById } from "./lib/jobs.js";
