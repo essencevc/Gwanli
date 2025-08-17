@@ -511,6 +511,43 @@ export async function indexNotionPages(
   }
 }
 
+// Helper function to update a single page in the database
+async function updatePageInDatabase(
+  notion: Client,
+  pageId: string,
+  db_path: string
+): Promise<void> {
+  const db = get_db(db_path);
+  
+  // Check if page exists in database
+  const existingPage = db.prepare("SELECT slug, title FROM page WHERE id = ?").get(pageId) as { slug: string; title: string } | undefined;
+  
+  if (!existingPage) {
+    throw new Error(`Page with ID ${pageId} not found in database`);
+  }
+
+  // Fetch the updated page from Notion
+  const page = await notion.pages.retrieve({ page_id: pageId });
+  
+  if (!("properties" in page)) {
+    throw new Error(`Retrieved page is not a valid page object`);
+  }
+
+  // Create a minimal id_to_slug map and job tracker for this page
+  const id_to_slug = { [pageId]: { slug: existingPage.slug, name: existingPage.title } };
+  const jobTracker = new JobTracker("Updating page in database");
+  
+  // Convert to markdown and update database
+  const convertedPage = await convertPageToMarkdown(
+    notion,
+    page as PageObjectResponse,
+    id_to_slug,
+    jobTracker
+  );
+  
+  insertPages(db, [convertedPage]);
+}
+
 export async function createPageFromMarkdown(
   notionToken: string,
   markdownContent: string,
@@ -552,11 +589,76 @@ export async function createPageFromMarkdown(
     };
 
     const response = await notion.pages.create(createPageParams);
+    
+    // Insert the newly created page into the database
+    const pageTitle = extractTitle(response as PageObjectResponse);
+    const childSlug = sanitizeSlug(pageTitle);
+    const fullSlug = `${parentSlug}/${childSlug}`;
+    insertPages(db, [{
+      id: response.id,
+      slug: fullSlug,
+      title: pageTitle,
+      content: markdownContent,
+      createdAt: (response as any).created_time,
+      lastUpdated: (response as any).last_edited_time,
+    }]);
+    
     return response.id;
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     throw new Error(`Failed to create page: ${errorMessage}`);
+  }
+}
+
+async function findBlocksByContent(
+  notion: Client,
+  pageId: string,
+  searchContent: string,
+  find_all: boolean = false
+): Promise<string | string[]> {
+  // Get all blocks from the page
+  const response = await notion.blocks.children.list({
+    block_id: pageId,
+    page_size: 100,
+  });
+
+  const n2m = new NotionToMarkdown({ notionClient: notion });
+  const matchingBlocks: { id: string; index: number }[] = [];
+
+  // Convert each block to markdown and search for matches
+  for (let i = 0; i < response.results.length; i++) {
+    const block = response.results[i];
+    
+    if (!("type" in block)) continue;
+
+    try {
+      // Convert single block to markdown using notion-to-md
+      const mdBlocks = await n2m.blocksToMarkdown([block as any]);
+      const markdownContent = n2m.toMarkdownString(mdBlocks).parent;
+
+      // Check if the search content is found in the markdown representation
+      if (markdownContent.trim().includes(searchContent.trim())) {
+        matchingBlocks.push({ id: block.id, index: i });
+      }
+    } catch (error) {
+      // Skip blocks that can't be converted to markdown
+      continue;
+    }
+  }
+
+  if (!find_all) {
+    // Default behavior: require exactly one match
+    if (matchingBlocks.length === 0) {
+      throw new Error(`No blocks found containing: "${searchContent}"`);
+    }
+    if (matchingBlocks.length > 1) {
+      throw new Error(`Multiple blocks found containing: "${searchContent}". Found ${matchingBlocks.length} matches. Please provide more specific content.`);
+    }
+    return matchingBlocks[0].id;
+  } else {
+    // Return all matching block IDs
+    return matchingBlocks.map(block => block.id);
   }
 }
 
@@ -633,10 +735,125 @@ export async function replaceParagraph(
       block_id: targetBlockId,
     });
 
+    // Update database with the modified page
+    await updatePageInDatabase(notion, page.id, db_path);
+
     return page.id;
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     throw new Error(`Failed to replace paragraph: ${errorMessage}`);
+  }
+}
+
+export async function appendToPage(
+  notionToken: string,
+  slug: string,
+  markdownContent: string,
+  db_path: string,
+  beforeBlockMarkdown?: string,
+  afterBlockMarkdown?: string
+): Promise<string> {
+  const notion = new Client({ auth: notionToken });
+  const db = get_db(db_path);
+
+  try {
+    // Find the page by slug
+    const page = getPageBySlug(db, slug);
+    if (!page) {
+      throw new Error(`Page not found with slug: ${slug}`);
+    }
+
+    // Convert markdown content to Notion blocks
+    const newBlocks = markdownToBlocks(markdownContent);
+
+    if (!beforeBlockMarkdown && !afterBlockMarkdown) {
+      // Simple append to end of page
+      await notion.blocks.children.append({
+        block_id: page.id,
+        children: newBlocks as any,
+      });
+      return page.id;
+    }
+
+    // Get all blocks from the page to find target positions
+    const response = await notion.blocks.children.list({
+      block_id: page.id,
+      page_size: 100,
+    });
+
+    if (beforeBlockMarkdown) {
+      // Find the target block by markdown content
+      const beforeBlockId = await findBlocksByContent(
+        notion,
+        page.id,
+        beforeBlockMarkdown,
+        false // find_all = false, require unique match
+      ) as string;
+
+      const targetIndex = response.results.findIndex(block => 
+        "id" in block && block.id === beforeBlockId
+      );
+
+      if (targetIndex === 0) {
+        // Special case: inserting before first item
+        // We need to create a copy of the first item, insert our content, then replace the original
+        const targetBlock = response.results[0];
+        
+        // First, append our new content to the page
+        await notion.blocks.children.append({
+          block_id: page.id,
+          children: newBlocks as any,
+        });
+
+        // Delete the original first block
+        await notion.blocks.delete({
+          block_id: beforeBlockId,
+        });
+
+        // Re-create the original first block after our content
+        if ("type" in targetBlock) {
+          // This is a simplified recreation - in a real implementation you'd need
+          // to handle all block types properly
+          const recreatedBlocks = [targetBlock as any];
+          await notion.blocks.children.append({
+            block_id: page.id,
+            children: recreatedBlocks,
+          });
+        }
+      } else {
+        // Insert before the target block (after the previous block)
+        const previousBlock = response.results[targetIndex - 1];
+        await notion.blocks.children.append({
+          block_id: page.id,
+          children: newBlocks as any,
+          after: "id" in previousBlock ? previousBlock.id : undefined,
+        });
+      }
+    } else if (afterBlockMarkdown) {
+      // Find the target block by markdown content
+      const afterBlockId = await findBlocksByContent(
+        notion,
+        page.id,
+        afterBlockMarkdown,
+        false // find_all = false, require unique match
+      ) as string;
+
+      // Insert after the specified block
+      await notion.blocks.children.append({
+        block_id: page.id,
+        children: newBlocks as any,
+        after: afterBlockId,
+      });
+    }
+
+    // Update database with the modified page
+    await updatePageInDatabase(notion, page.id, db_path);
+
+    return page.id;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to append to page: ${errorMessage}`);
   }
 }
